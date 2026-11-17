@@ -2,7 +2,7 @@
 
 /** A format of the player response's streamingData.adaptiveFormats: only its audio track matters here. */
 export interface AudioFormat {
-  audioTrack?: { id?: string; audioIsDefault?: boolean } | null;
+  audioTrack?: { id?: string; audioIsDefault?: boolean; isAutoDubbed?: boolean } | null;
   [other: string]: unknown;
 }
 
@@ -15,11 +15,15 @@ export interface CaptionTrack {
   kind?: string;
 }
 
-/** Original audio language: the default audio track (id suffix «.4»); AI dubs end in «.10». */
+/** Original audio language: the original track (id suffix «.4»), else the default one that is no dub. YouTube's
+ *  AI dubs («.10», isAutoDubbed) are never the original, even when YouTube makes one the default for a viewer in
+ *  its language (a Ukrainian viewer gets the «uk.10» dub by default). */
 export function originalLang(formats?: AudioFormat[] | null, audioTracks?: AudioTrack[] | null): string | null {
-  const f = (formats || []).find((x) => x.audioTrack && x.audioTrack.audioIsDefault);
-  const id = (f && f.audioTrack && f.audioTrack.id) ||
-    ((audioTracks || []).find((a) => /\.4$/.test(a.audioTrackId || '')) || {}).audioTrackId;
+  const tracks = (formats || []).map((x) => x.audioTrack).filter((t) => !!t);
+  const original = (id?: string): boolean => /\.4$/.test(id || '');
+  const dub = (t: NonNullable<AudioFormat['audioTrack']>): boolean => !!t.isAutoDubbed || /\.10$/.test(t.id || '');
+  const id = (tracks.find((t) => original(t.id)) || tracks.find((t) => t.audioIsDefault && !dub(t)) || {}).id ||
+    ((audioTracks || []).find((a) => original(a.audioTrackId)) || {}).audioTrackId;
   return id ? id.split('.')[0]! : null;
 }
 

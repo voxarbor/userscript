@@ -52,7 +52,9 @@ export function readPlayer(player: Player | null): PlayerData | null {
     },
     streamingData: {
       adaptiveFormats: copied((pr.streamingData || {}).adaptiveFormats, (f) =>
-        f.audioTrack ? { audioTrack: { id: f.audioTrack.id, audioIsDefault: f.audioTrack.audioIsDefault } } : {}),
+        f.audioTrack
+          ? { audioTrack: { id: f.audioTrack.id, audioIsDefault: f.audioTrack.audioIsDefault, isAutoDubbed: f.audioTrack.isAutoDubbed } }
+          : {}),
     },
   };
   return JSON.parse(JSON.stringify(data)) as PlayerData; // plain data: what the page left undefined is not there

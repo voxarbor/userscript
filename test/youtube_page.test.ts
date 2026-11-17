@@ -62,3 +62,16 @@ test('a page without a player, or a player without a response, reads as nothing'
     streamingData: { adaptiveFormats: [] },
   });
 });
+
+test('YouTube\'s own Ukrainian dub, the default for a Ukrainian viewer, is not taken for the original', async () => {
+  // a fragment of the real player response of youtube:ZbmfYMlrlII as a viewer in Ukraine gets it (2026-11-17):
+  // the AI dub «uk.10» is the default track, the English original «en-US.4» is not
+  const { readFileSync } = await import('node:fs');
+  const real = JSON.parse(readFileSync(new URL('./fixtures/ZbmfYMlrlII.json', import.meta.url), 'utf8'));
+  const pr = readPlayer({ getPlayerResponse: () => real });
+  assert.ok(pr);
+  const cr = pr.captions.playerCaptionsTracklistRenderer;
+  assert.equal(originalLang(pr.streamingData.adaptiveFormats, cr.audioTracks), 'en-US');
+  assert.equal(ukrainianDub(pr.streamingData.adaptiveFormats, cr.audioTracks), true);
+  assert.deepEqual(pickCaption(cr.captionTracks, 'en-US'), { track: { languageCode: 'en', kind: 'asr' }, subs: 'asr' });
+});
