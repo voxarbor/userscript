@@ -3,6 +3,7 @@
 import { adapterFor } from './adapters/registry';
 import type { SiteAdapter } from './adapters/types';
 import { ServerApi } from './api/client';
+import { autoLink, onPanel, type LinkBox } from './core/autolink';
 import { readyOffer } from './core/ready';
 import { VoiceoverSession } from './core/session';
 import { scriptManager } from './platform/gm';
@@ -138,5 +139,12 @@ function wire(adapter: SiteAdapter): void {
   watch();
 }
 
-const adapter = adapterFor(location);
-if (adapter) wire(adapter);
+if (onPanel(location, SERVER)) {
+  const box = document.getElementById('script-link');
+  const S = store.current;
+  const api = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }));
+  if (box) void autoLink(box as unknown as LinkBox, { api, settings: S, saved: () => store.save() });
+} else {
+  const adapter = adapterFor(location);
+  if (adapter) wire(adapter);
+}

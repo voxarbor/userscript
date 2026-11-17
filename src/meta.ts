@@ -1,6 +1,6 @@
 // The userscript header. build.mjs prints it above the bundle; the server rewrites the two URL lines and the
 // __VOXARBOR_SERVER__ placeholder when it serves the file.
-export const VERSION = '0.6.2';
+export const VERSION = '0.7.0';
 
 const FIELDS: [string, string][] = [
   ['name', 'VoxArbor UA'],
@@ -8,6 +8,7 @@ const FIELDS: [string, string][] = [
   ['version', VERSION],
   ['description', 'Ukrainian voice-over for videos via a self-hosted VoxArbor UA server'],
   ['match', '*://*.youtube.com/*'],
+  ['match', '__VOXARBOR_SERVER__/panel/install*'], // «Скрипт»: connects there by itself (core/autolink.ts)
   ['grant', 'GM_xmlhttpRequest'],
   ['grant', 'GM_getValue'],
   ['grant', 'GM_setValue'],

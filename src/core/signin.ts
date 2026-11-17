@@ -32,7 +32,7 @@ export type Connected = Awaited<ReturnType<ServerApi['deviceToken']>>;
 export async function signIn(host: SignInHost, name: string, shown: (code: string) => void): Promise<Connected> {
   const told = await host.api.deviceCode({ name });
   shown(told.user_code);
-  host.openTab(`${SERVER}/admin/connect?code=${encodeURIComponent(told.user_code)}`);
+  host.openTab(`${SERVER}/panel/connect?code=${encodeURIComponent(told.user_code)}`);
   let gap = told.interval;
   for (let waited = 0; waited < told.expires_in; ) {
     await host.wait(gap * 1000);

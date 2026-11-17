@@ -35,7 +35,7 @@ test('the script shows the code, opens the site on it and polls until the person
   const shown: string[] = [];
   assert.deepEqual(await signIn(h, 'Firefox · Windows', (code) => shown.push(code)), { token: 'vxa_tok', login: 'ann', name: 'Firefox' });
   assert.deepEqual(shown, ['BCDF-GHJK']);
-  assert.deepEqual(opened, [`${SERVER}/admin/connect?code=BCDF-GHJK`]); // no secret in it
+  assert.deepEqual(opened, [`${SERVER}/panel/connect?code=BCDF-GHJK`]); // no secret in it
   assert.deepEqual(asked, ['code Firefox · Windows', 'token dev-secret', 'token dev-secret']);
   assert.deepEqual(waited, [5000, 5000]); // the first poll waits too: the person needs a moment
 });

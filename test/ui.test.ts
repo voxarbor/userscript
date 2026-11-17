@@ -270,7 +270,7 @@ test('«Підключити» shows the code, opens the site on it and keeps th
   await settle();
   assert.equal(connect.disabled, true);
   assert.match(status(), /^Код BCDF-GHJK:/);
-  assert.deepEqual(told, ['device Firefox · Android', `open ${SERVER}/admin/connect?code=BCDF-GHJK`]);
+  assert.deepEqual(told, ['device Firefox · Android', `open ${SERVER}/panel/connect?code=BCDF-GHJK`]);
   await vi.advanceTimersByTimeAsync(5000);
   assert.deepEqual([settings.token, saved().token, saved().account], ['vxa_new', 'vxa_new', 'user · Мій телефон']);
   assert.deepEqual(told.slice(2), ['connection changed']);

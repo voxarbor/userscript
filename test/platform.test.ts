@@ -13,6 +13,6 @@ test('the platform of the tests keeps values, records requests and menu commands
   p.menu('Налаштування', () => ran++);
   p.menus[0]!.run();
   assert.deepEqual([p.menus[0]!.title, ran], ['Налаштування', 1]);
-  p.openTab('https://vox.test/admin/connect');
-  assert.deepEqual(p.tabs, ['https://vox.test/admin/connect']);
+  p.openTab('https://vox.test/panel/connect');
+  assert.deepEqual(p.tabs, ['https://vox.test/panel/connect']);
 });
