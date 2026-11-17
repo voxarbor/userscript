@@ -1,6 +1,7 @@
 // The voice-over of the page's video. VoiceoverSession switches it on and off and owns what it holds: the audio
 // output, the state of the voice-over that is on (Run) and, for a minute after a switching off, what was prepared.
 // Three parts work on a run: the poller asks the server, the loader fetches the audio, the playback sounds it.
+import type { ToastAction } from '../ui/dom';
 import type { SiteAdapter } from '../adapters/types';
 import type { Segment, ServerApi } from '../api/client';
 import type { Settings } from '../settings/store';
@@ -20,8 +21,10 @@ export interface SessionHost {
   readonly site: Pick<SiteAdapter, 'getVideo' | 'getVideoUrl' | 'inAd' | 'collectPage'>;
   /** What the voice-over does now, for the switch; text is its tooltip. */
   setState(state: SessionState, text?: string): void;
-  /** A line for the user. */
-  toast(message: string): void;
+  /** A line for the user; with an action, a button that does it. */
+  toast(message: string, action?: ToastAction): void;
+  /** The name of a voice to show, by its id (the id itself when it is not known). */
+  voiceName(id: string): Promise<string>;
   /** The connection cannot be used as it is set: the user gets the settings. */
   openSettings(): void;
 }
@@ -50,6 +53,12 @@ export class Run {
   error: string | null = null;
   /** Why nothing new is made for this person (they hear what is ready), in the server's words; null: it is. */
   refused: string | null = null;
+  /** The voice the video is voiced in on the server, for everybody; null: not told yet. */
+  videoVoice: string | null = null;
+  /** The person was offered to voice it in theirs (once a run, unless they took the offer). */
+  offered = false;
+  /** The person asked to voice the video in their voice: the next POST switches it. */
+  wantSwitch = false;
   /** The server's end of the unbroken voiced run; null when it belongs to an older position or voice. */
   voicedUntil: number | null = null;
   pageSent = false;

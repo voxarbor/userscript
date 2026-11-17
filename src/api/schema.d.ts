@@ -353,6 +353,8 @@ export interface components {
             speakers?: components["schemas"]["SpeakerOut"][] | null;
             /** Status */
             status: string | null;
+            /** Voice */
+            voice?: string | null;
             /** Voiced Until */
             voiced_until: number;
         };
@@ -429,6 +431,8 @@ export interface components {
              * @default false
              */
             page_support: boolean;
+            /** Switch */
+            switch?: boolean | null;
             /** Url */
             url: string;
             /** Voice */
@@ -450,6 +454,8 @@ export interface components {
             status: string | null;
             /** Video Key */
             video_key: string;
+            /** Voice */
+            voice?: string | null;
         };
         /** VideoVoicesOut */
         VideoVoicesOut: {
@@ -682,6 +688,7 @@ export interface operations {
                 lead_male?: string | null;
                 lead_female?: string | null;
                 paused?: number;
+                tab?: string | null;
             };
             header?: {
                 authorization?: string;

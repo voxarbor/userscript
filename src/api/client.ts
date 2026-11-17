@@ -44,6 +44,9 @@ export interface Access {
 }
 
 export class ServerApi {
+  /** This tab among the viewers of a video: two tabs at other places are two viewers of the server's queue. */
+  private readonly tab = Math.random().toString(36).slice(2, 10);
+
   /** send: how a request leaves the page (the script manager's cross-origin request). */
   constructor(
     private readonly send: (request: HttpRequest) => void,
@@ -58,7 +61,7 @@ export class ServerApi {
   /** The phrases of the minute from `from` (seconds). paused: the viewer does not watch now, so the video gets
    *  no viewer priority. */
   segments(key: string, from: number, paused: boolean): Promise<SegmentsOut> {
-    const query = `from=${from.toFixed(2)}&window=${WINDOW_S}` + (paused ? '&paused=1' : '');
+    const query = `from=${from.toFixed(2)}&window=${WINDOW_S}` + (paused ? '&paused=1' : '') + `&tab=${this.tab}`;
     return this.ask('GET', `/v1/videos/${encodeURIComponent(key)}/segments?${query}`, undefined, false);
   }
 

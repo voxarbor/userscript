@@ -1,6 +1,6 @@
 // The userscript header. build.mjs prints it above the bundle; the server rewrites the two URL lines and the
 // __VOXARBOR_SERVER__ placeholder when it serves the file.
-export const VERSION = '0.7.0';
+export const VERSION = '0.8.0';
 
 const FIELDS: [string, string][] = [
   ['name', 'VoxArbor UA'],

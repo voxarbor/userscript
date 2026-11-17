@@ -2,7 +2,7 @@
 // and the UI together, and follows the page (the buttons' place, navigation to another video).
 import { adapterFor } from './adapters/registry';
 import type { SiteAdapter } from './adapters/types';
-import { ServerApi } from './api/client';
+import { ServerApi, type Voice } from './api/client';
 import { autoLink, onPanel, type LinkBox } from './core/autolink';
 import { readyOffer } from './core/ready';
 import { VoiceoverSession } from './core/session';
@@ -28,12 +28,17 @@ function wire(adapter: SiteAdapter): void {
   const server = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }));
   let unmount: (() => void) | null = null; // takes the buttons out of the page
 
+  // the voices once a page (the settings' list): a name to show for an id
+  let voicesReq: Promise<Voice[]> | null = null;
+  const voiceList = (): Promise<Voice[]> => (voicesReq ??= server.voices().catch((e) => { voicesReq = null; throw e; }));
+
   const session = new VoiceoverSession({
     settings: S,
     api: server,
     site: adapter,
     setState: (state, text) => ui.setState(state, text),
     toast,
+    voiceName: async (id: string): Promise<string> => (await voiceList().catch(() => [])).find((v) => v.id === id)?.label || id,
     openSettings: () => ui.openSettings(),
   });
 

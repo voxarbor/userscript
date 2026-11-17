@@ -4,6 +4,7 @@ import { afterEach, test, vi } from 'vitest';
 import { ApiError, type PageData, type Segment } from '../src/api/client';
 import { type SessionHost, VoiceoverSession } from '../src/core/session';
 import { DEFAULTS, type Settings } from '../src/settings/store';
+import type { ToastAction } from '../src/ui/dom';
 import { installAudio } from './fake_audio';
 import { FakeElement, installDom } from './fake_dom';
 
@@ -13,7 +14,7 @@ afterEach(() => {
 
 const VIDEO_A = 'https://www.youtube.com/watch?v=aaaaaaaaaaa';
 const VIDEO_B = 'https://www.youtube.com/watch?v=bbbbbbbbbbb';
-const OPEN_A = `POST {"url":"${VIDEO_A}","voice":"Speaker_53","lead_male":"","lead_female":"","page_support":true}`;
+const OPEN_A = `POST {"url":"${VIDEO_A}","voice":"Speaker_53","lead_male":"","lead_female":"","page_support":true,"switch":false}`;
 
 /** A video element as far as the session uses it. As in a browser, play() and pause() act at once and their
  *  events come after the code that called them. */
@@ -69,11 +70,15 @@ function page(over: Partial<Settings> = {}) {
     holdWindows: false,
     lost: [] as string[],
     clips: {} as Record<string, number>,
+    /** The voice the video is voiced in for everybody; null: as the viewer asked. */
+    voice: null as string | null,
   };
   const site = { url: VIDEO_A as string | null, video: video as FakeVideo | null, ad: false, page: null as PageData | null };
   /** The requests made, and what the session told the user, both in order. */
   const asked: string[] = [];
   const told: string[] = [];
+  /** What the toasts offered to do. */
+  const offers: ToastAction[] = [];
   const undelivered: (() => void)[] = [];
   const heldWindows: (() => void)[] = [];
 
@@ -83,13 +88,15 @@ function page(over: Partial<Settings> = {}) {
       async video(body) {
         asked.push('POST ' + JSON.stringify(body));
         if (server.down) throw server.down;
-        return { video_key: 'k1', status: server.status, error: server.error, page_needed: server.pageNeeded, duration: null, source_lang: null, refused: server.refused };
+        if (body.switch || !server.voice) server.voice = body.voice ?? null;
+        return { video_key: 'k1', status: server.status, error: server.error, page_needed: server.pageNeeded,
+          duration: null, source_lang: null, refused: server.refused, voice: server.voice };
       },
       async segments(key, from, paused) {
         asked.push(`GET ${key} from ${from}${paused ? ' paused' : ''}`);
         if (server.down) throw server.down;
         const answer = { status: server.status, progress: server.progress, error: server.error, refused: server.refused,
-          voiced_until: server.voicedUntil, page_needed: server.pageNeeded, segments: server.phrases };
+          voiced_until: server.voicedUntil, page_needed: server.pageNeeded, segments: server.phrases, voice: server.voice };
         if (server.holdWindows) await new Promise<void>((go) => heldWindows.push(go));
         return answer;
       },
@@ -110,7 +117,11 @@ function page(over: Partial<Settings> = {}) {
       collectPage: async () => site.page,
     },
     setState: (state, text) => told.push(text ? `${state}: ${text}` : state),
-    toast: (message) => told.push('toast: ' + message),
+    toast: (message, action) => {
+      told.push('toast: ' + message);
+      if (action) offers.push(action);
+    },
+    voiceName: async (id) => 'name of ' + id,
     openSettings: () => told.push('settings'),
   };
 
@@ -137,7 +148,7 @@ function page(over: Partial<Settings> = {}) {
   const audio = () => contexts[0]!;
   const sounds = () => audio().sources;
 
-  return { session: new VoiceoverSession(host), video, settings, server, site, asked, told, contexts, pass, frame, deliver, deliverWindow, audio, sounds };
+  return { session: new VoiceoverSession(host), video, settings, server, site, asked, told, offers, contexts, pass, frame, deliver, deliverWindow, audio, sounds };
 }
 
 test('switching on opens the video on the server and asks for its phrases, then asks as often as its state needs', async () => {
@@ -390,7 +401,7 @@ test('another voice or speakers\' mode goes to the server in a new POST and the 
   p.session.voicesChanged();
   await p.pass(0);
   assert.deepEqual(p.asked, [
-    `POST {"url":"${VIDEO_A}","voice":"anna","mode":"two","lead_male":"","lead_female":"anna","page_support":true}`,
+    `POST {"url":"${VIDEO_A}","voice":"anna","mode":"two","lead_male":"","lead_female":"anna","page_support":true,"switch":true}`,
     'GET k1 from 0', ...audioOf(0)]);
 
   p.asked.length = 0;
@@ -403,7 +414,7 @@ test('a voice taken for this video alone voices it by itself; a choice in the se
   const p = page({ voice: 'taras', mode: 'two', leadFemale: 'olena' });
   p.session.start('anna');
   await p.pass(0);
-  const alone = `POST {"url":"${VIDEO_A}","voice":"anna","mode":"one","lead_male":"","lead_female":"","page_support":true}`;
+  const alone = `POST {"url":"${VIDEO_A}","voice":"anna","mode":"one","lead_male":"","lead_female":"","page_support":true,"switch":true}`;
   assert.deepEqual(p.asked, [alone, 'GET k1 from 0']);
 
   p.session.stop();
@@ -414,16 +425,16 @@ test('a voice taken for this video alone voices it by itself; a choice in the se
   p.session.stop();
   p.session.start(); // and not for the voices of the settings
   await p.pass(0);
-  const own = `POST {"url":"${VIDEO_A}","voice":"taras","mode":"two","lead_male":"","lead_female":"olena","page_support":true}`;
+  const own = `POST {"url":"${VIDEO_A}","voice":"taras","mode":"two","lead_male":"","lead_female":"olena","page_support":true,"switch":false}`;
   assert.deepEqual(p.asked.slice(1), [own, 'GET k1 from 0']);
 
   p.session.stop();
   p.session.start('anna');
   await p.pass(0);
   p.asked.length = 0;
-  p.session.voicesChanged(); // the viewer chose in the settings
+  p.session.voicesChanged(); // the viewer chose in the settings: a switch
   await p.pass(0);
-  assert.deepEqual(p.asked, [own, 'GET k1 from 0']);
+  assert.deepEqual(p.asked, [own.replace('"switch":false', '"switch":true'), 'GET k1 from 0']);
 });
 
 test('audio of the voice before, arriving after the change, is not played', async () => {
@@ -702,4 +713,21 @@ test('the audio context is made once, at the first asking; without one a volume 
   const made = p.session.audio();
   p.session.start();
   assert.deepEqual([p.session.audio() === made, p.contexts.length], [true, 1]);
+});
+
+test('a video voiced in another voice is heard as it is, and the person is offered to voice it in theirs', async () => {
+  const p = page();
+  p.server.voice = 'olena'; // somebody voiced it so, for everybody
+  p.session.start();
+  await p.pass(0);
+  assert.equal(p.asked[0], OPEN_A); // opening it switches nothing
+  assert.equal(p.server.voice, 'olena');
+  assert.deepEqual(p.told.filter((t) => t.startsWith('toast')), ['toast: відео озвучено голосом «name of olena»']);
+  await p.pass(5000); // once a run, not at every poll
+  assert.equal(p.told.filter((t) => t.startsWith('toast')).length, 1);
+  p.asked.length = 0;
+  p.offers[0]!.run(); // «Озвучити моїм голосом»
+  await p.pass(0);
+  assert.equal(p.asked[0], OPEN_A.replace('"switch":false', '"switch":true'));
+  assert.equal(p.server.voice, 'Speaker_53');
 });

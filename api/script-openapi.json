@@ -465,6 +465,17 @@
       ],
       "title": "Status"
      },
+     "voice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice"
+     },
      "voiced_until": {
       "title": "Voiced Until",
       "type": "number"
@@ -772,6 +783,17 @@
       "title": "Page Support",
       "type": "boolean"
      },
+     "switch": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Switch"
+     },
      "url": {
       "title": "Url",
       "type": "string"
@@ -858,6 +880,17 @@
      "video_key": {
       "title": "Video Key",
       "type": "string"
+     },
+     "voice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice"
      }
     },
     "required": [
@@ -1335,6 +1368,23 @@
        "minimum": 0,
        "title": "Paused",
        "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "tab",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 40,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Tab"
       }
      },
      {

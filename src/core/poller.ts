@@ -50,12 +50,17 @@ export class Poller {
     let delay = s.held ? HELD_POLL_MS : POLL_MS; // paused there is no frame loop, poll() releases the hold
     try {
       // Voice settings go to the server only in a POST when they change (not with every segments GET), so two
-      // devices on one video don't keep switching it back and forth.
+      // devices on one video don't keep switching it back and forth. Opening a video switches nothing (switch:
+      // false): a video already voiced keeps its voice for everybody, and the person is offered to voice it in
+      // theirs; a change in the settings during the run, a voice taken for this video, or that offer switch it.
       const voices = voicesOf(s, S);
       const mode = modeOf(voices);
-      if (!s.key || s.mode !== mode) {
+      if (!s.key || s.mode !== mode || s.wantSwitch) {
+        const change = !!s.key || !!s.only || s.wantSwitch;
         const r = await api.video({ url: s.url, voice: voices.voice, ...(voices.mode ? { mode: voices.mode } : {}),
-          lead_male: voices.leadMale || '', lead_female: voices.leadFemale || '', page_support: true });
+          lead_male: voices.leadMale || '', lead_female: voices.leadFemale || '', page_support: true, switch: change });
+        s.wantSwitch = false;
+        s.videoVoice = r.voice ?? null;
         if (r.page_needed) this.sendPage(s);
         s.mode = mode;
         s.key = r.video_key;
@@ -63,6 +68,7 @@ export class Poller {
         s.refused = r.refused ?? null;
         if (r.status === 'error') throw fatal(r.error);
         if (r.status === null && s.refused) throw fatal(s.refused); // nothing to read, and nothing is made for them
+        this.offer(s);
       }
       if (s.status !== 'ready' || needFetch(s.video.currentTime, s.windowEnd) ||
         windowIncomplete(s.list, s.video.currentTime, s.windowEnd || 0) || Date.now() - s.lastGet >= HEARTBEAT_MS) await this.fetchWindow(s, s.key);
@@ -116,6 +122,8 @@ export class Poller {
     s.progress = r.progress;
     s.error = r.error; // with a non-error status: a transient local-ai problem, shown but not fatal
     s.refused = r.refused ?? null;
+    s.videoVoice = r.voice ?? s.videoVoice;
+    this.offer(s);
     s.voicedUntil = r.voiced_until;
     if (r.page_needed) this.sendPage(s);
     for (const seg of r.segments || []) {
@@ -134,6 +142,26 @@ export class Poller {
     s.list = [...s.segs.values()].sort((a, b) => a.start - b.start);
     if (gen === s.gen) s.windowEnd = from + 60;
     this.loader.pump(s);
+  }
+
+  /** The video is voiced in another voice than the person's (someone chose it, for everybody): they hear it as
+   *  it is and are offered, once a run, to voice it in theirs (a switch, for everybody). */
+  private offer(s: Run): void {
+    const want = voicesOf(s, this.host.settings).voice;
+    const now = s.videoVoice;
+    if (s.offered || !now || !want || now === want || s.refused || s.stopped) return;
+    s.offered = true;
+    void this.host.voiceName(now).then((name) => {
+      if (s.stopped) return;
+      this.host.toast(`відео озвучено голосом «${name}»`, {
+        label: 'Озвучити моїм голосом',
+        run: () => {
+          s.wantSwitch = true;
+          s.offered = false;
+          this.kick(s, 0);
+        },
+      });
+    });
   }
 
   /** The server asks for page data (page_needed) when it hasn't the video's subtitles yet: collect them from the

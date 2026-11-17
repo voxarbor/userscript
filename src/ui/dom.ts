@@ -40,11 +40,28 @@ export function icon(d: string): SVGSVGElement {
   return svg;
 }
 
-/** A line at the bottom of the page for six seconds. */
-export function toast(message: string): void {
+/** What a line for the user offers to do: a button with its label. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
+/** A line at the bottom of the page for six seconds; with an action, a button too and twelve seconds. */
+export function toast(message: string, action?: ToastAction): void {
   const d = el('div', { textContent: 'VoxArbor UA: ' + message });
   d.style.cssText = 'position:fixed;left:50%;bottom:80px;transform:translateX(-50%);z-index:2147483647;' +
-    'background:#222;color:#fff;padding:8px 14px;border-radius:6px;font:14px sans-serif;max-width:90vw';
+    'background:#222;color:#fff;padding:8px 14px;border-radius:6px;font:14px sans-serif;max-width:90vw;' +
+    'display:flex;gap:12px;align-items:center';
+  if (action) {
+    const b = el('button', { type: 'button', textContent: action.label });
+    b.style.cssText = 'background:#ff8a00;color:#111;border:0;border-radius:4px;padding:6px 10px;font:600 13px sans-serif;' +
+      'cursor:pointer;white-space:nowrap';
+    b.addEventListener('click', () => {
+      d.remove();
+      action.run();
+    });
+    d.append(b);
+  }
   document.body.append(d);
-  setTimeout(() => d.remove(), 6000);
+  setTimeout(() => d.remove(), action ? 12000 : 6000);
 }
