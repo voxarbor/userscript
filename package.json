@@ -1,0 +1,20 @@
+{
+  "name": "voxarbor-userscript",
+  "private": true,
+  "type": "module",
+  "description": "VoxArbor UA userscript: TypeScript sources, built into dist/voxarbor.user.js (the file a VoxArbor UA server serves)",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "schema": "openapi-typescript api/script-openapi.json -o src/api/schema.d.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "esbuild": "^0.25.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "Apache-2.0"
+}

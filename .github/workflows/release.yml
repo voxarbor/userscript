@@ -1,0 +1,32 @@
+name: Release
+# A tag vX.Y.Z publishes the built voxarbor.user.js as a release asset. The tag must be the version in src/meta.ts.
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+      - run: ./check.sh
+      - name: The tag is the script's version
+        run: |
+          version=$(sed -n "s/^export const VERSION = '\(.*\)';/\1/p" src/meta.ts)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, src/meta.ts $version" >&2; exit 1; }
+      - name: Release with the script
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Скрипт VoxArbor UA $GITHUB_REF_NAME."
+            echo
+            echo "Сервер VoxArbor UA віддає цей файл за адресою /voxarbor.user.js і сам підставляє в нього свою адресу."
+            echo "Встановлюйте скрипт із сервера, а не звідси: так він оновлюватиметься сам."
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/voxarbor.user.js --title "$GITHUB_REF_NAME" --notes-file notes.md

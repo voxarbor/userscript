@@ -1,0 +1,1688 @@
+{
+ "components": {
+  "schemas": {
+   "DeviceCodeOut": {
+    "properties": {
+     "device_code": {
+      "title": "Device Code",
+      "type": "string"
+     },
+     "expires_in": {
+      "title": "Expires In",
+      "type": "integer"
+     },
+     "interval": {
+      "title": "Interval",
+      "type": "integer"
+     },
+     "user_code": {
+      "title": "User Code",
+      "type": "string"
+     }
+    },
+    "required": [
+     "device_code",
+     "user_code",
+     "expires_in",
+     "interval"
+    ],
+    "title": "DeviceCodeOut",
+    "type": "object"
+   },
+   "DeviceIn": {
+    "properties": {
+     "name": {
+      "default": "",
+      "maxLength": 64,
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "title": "DeviceIn",
+    "type": "object"
+   },
+   "DeviceTokenIn": {
+    "properties": {
+     "device_code": {
+      "maxLength": 256,
+      "title": "Device Code",
+      "type": "string"
+     }
+    },
+    "required": [
+     "device_code"
+    ],
+    "title": "DeviceTokenIn",
+    "type": "object"
+   },
+   "DeviceTokenOut": {
+    "properties": {
+     "login": {
+      "title": "Login",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "token": {
+      "title": "Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "token",
+     "login",
+     "name"
+    ],
+    "title": "DeviceTokenOut",
+    "type": "object"
+   },
+   "DeviceWaitOut": {
+    "properties": {
+     "error": {
+      "enum": [
+       "authorization_pending",
+       "slow_down",
+       "access_denied",
+       "expired_token"
+      ],
+      "title": "Error",
+      "type": "string"
+     }
+    },
+    "required": [
+     "error"
+    ],
+    "title": "DeviceWaitOut",
+    "type": "object"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "title": "Detail",
+      "type": "array"
+     }
+    },
+    "title": "HTTPValidationError",
+    "type": "object"
+   },
+   "LibraryVideoOut": {
+    "properties": {
+     "duration": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration"
+     },
+     "key": {
+      "title": "Key",
+      "type": "string"
+     },
+     "mode": {
+      "enum": [
+       "one",
+       "two",
+       "each"
+      ],
+      "title": "Mode",
+      "type": "string"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Title"
+     },
+     "translated": {
+      "title": "Translated",
+      "type": "number"
+     },
+     "updated_at": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Updated At"
+     },
+     "url": {
+      "title": "Url",
+      "type": "string"
+     },
+     "voices": {
+      "additionalProperties": {
+       "type": "number"
+      },
+      "title": "Voices",
+      "type": "object"
+     }
+    },
+    "required": [
+     "key",
+     "url",
+     "title",
+     "duration",
+     "status",
+     "translated",
+     "voices",
+     "mode",
+     "updated_at"
+    ],
+    "title": "LibraryVideoOut",
+    "type": "object"
+   },
+   "OriginalOut": {
+    "properties": {
+     "end": {
+      "title": "End",
+      "type": "number"
+     },
+     "start": {
+      "title": "Start",
+      "type": "number"
+     }
+    },
+    "required": [
+     "start",
+     "end"
+    ],
+    "title": "OriginalOut",
+    "type": "object"
+   },
+   "PageIn": {
+    "description": "What the userscript saw on the YouTube page; captions in it spare the coordinator any YouTube request.",
+    "properties": {
+     "channel": {
+      "anyOf": [
+       {
+        "maxLength": 200,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Channel"
+     },
+     "duration": {
+      "anyOf": [
+       {
+        "exclusiveMinimum": 0.0,
+        "maximum": 604800.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration"
+     },
+     "json3": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Json3"
+     },
+     "lang": {
+      "anyOf": [
+       {
+        "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lang"
+     },
+     "subs": {
+      "anyOf": [
+       {
+        "enum": [
+         "manual",
+         "auto",
+         "asr"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Subs"
+     },
+     "subs_lang": {
+      "anyOf": [
+       {
+        "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Subs Lang"
+     },
+     "title": {
+      "anyOf": [
+       {
+        "maxLength": 500,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Title"
+     },
+     "video_id": {
+      "anyOf": [
+       {
+        "maxLength": 32,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Video Id"
+     }
+    },
+    "title": "PageIn",
+    "type": "object"
+   },
+   "SegmentOut": {
+    "properties": {
+     "audio": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Audio"
+     },
+     "end": {
+      "title": "End",
+      "type": "number"
+     },
+     "i": {
+      "title": "I",
+      "type": "integer"
+     },
+     "speaker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Speaker"
+     },
+     "src": {
+      "title": "Src",
+      "type": "string"
+     },
+     "start": {
+      "title": "Start",
+      "type": "number"
+     },
+     "uk": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uk"
+     },
+     "voice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice"
+     }
+    },
+    "required": [
+     "i",
+     "start",
+     "end",
+     "src",
+     "uk",
+     "speaker",
+     "voice",
+     "audio"
+    ],
+    "title": "SegmentOut",
+    "type": "object"
+   },
+   "SegmentsOut": {
+    "properties": {
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "page_needed": {
+      "title": "Page Needed",
+      "type": "boolean"
+     },
+     "progress": {
+      "title": "Progress",
+      "type": "number"
+     },
+     "refused": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Refused"
+     },
+     "segments": {
+      "items": {
+       "$ref": "#/components/schemas/SegmentOut"
+      },
+      "title": "Segments",
+      "type": "array"
+     },
+     "speakers": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/SpeakerOut"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Speakers"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "voiced_until": {
+      "title": "Voiced Until",
+      "type": "number"
+     }
+    },
+    "required": [
+     "status",
+     "progress",
+     "error",
+     "voiced_until",
+     "segments",
+     "page_needed"
+    ],
+    "title": "SegmentsOut",
+    "type": "object"
+   },
+   "SpeakerOut": {
+    "properties": {
+     "gender": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gender"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "voice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice"
+     }
+    },
+    "required": [
+     "id",
+     "gender",
+     "voice"
+    ],
+    "title": "SpeakerOut",
+    "type": "object"
+   },
+   "SpeakerViewOut": {
+    "properties": {
+     "gender": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gender"
+     },
+     "gender_confidence": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gender Confidence"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "manual": {
+      "title": "Manual",
+      "type": "boolean"
+     },
+     "original": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OriginalOut"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "talk_s": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Talk S"
+     },
+     "voice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice"
+     },
+     "voiced": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voiced"
+     }
+    },
+    "required": [
+     "id",
+     "gender",
+     "gender_confidence",
+     "talk_s",
+     "voice",
+     "manual",
+     "original",
+     "voiced"
+    ],
+    "title": "SpeakerViewOut",
+    "type": "object"
+   },
+   "SpeakerVoiceIn": {
+    "properties": {
+     "voice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice"
+     }
+    },
+    "required": [
+     "voice"
+    ],
+    "title": "SpeakerVoiceIn",
+    "type": "object"
+   },
+   "SpeakersViewOut": {
+    "properties": {
+     "lead_female": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lead Female"
+     },
+     "lead_male": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lead Male"
+     },
+     "mode": {
+      "enum": [
+       "one",
+       "two",
+       "each"
+      ],
+      "title": "Mode",
+      "type": "string"
+     },
+     "speakers": {
+      "items": {
+       "$ref": "#/components/schemas/SpeakerViewOut"
+      },
+      "title": "Speakers",
+      "type": "array"
+     }
+    },
+    "required": [
+     "mode",
+     "lead_male",
+     "lead_female",
+     "speakers"
+    ],
+    "title": "SpeakersViewOut",
+    "type": "object"
+   },
+   "ValidationError": {
+    "properties": {
+     "ctx": {
+      "title": "Context",
+      "type": "object"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "title": "Location",
+      "type": "array"
+     },
+     "msg": {
+      "title": "Message",
+      "type": "string"
+     },
+     "type": {
+      "title": "Error Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError",
+    "type": "object"
+   },
+   "VideoIn": {
+    "properties": {
+     "lead_female": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lead Female"
+     },
+     "lead_male": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lead Male"
+     },
+     "mode": {
+      "anyOf": [
+       {
+        "enum": [
+         "one",
+         "two",
+         "each"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mode"
+     },
+     "page": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PageIn"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "page_support": {
+      "default": false,
+      "title": "Page Support",
+      "type": "boolean"
+     },
+     "url": {
+      "title": "Url",
+      "type": "string"
+     },
+     "voice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice"
+     }
+    },
+    "required": [
+     "url"
+    ],
+    "title": "VideoIn",
+    "type": "object"
+   },
+   "VideoOut": {
+    "properties": {
+     "duration": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "page_needed": {
+      "title": "Page Needed",
+      "type": "boolean"
+     },
+     "refused": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Refused"
+     },
+     "source_lang": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source Lang"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "video_key": {
+      "title": "Video Key",
+      "type": "string"
+     }
+    },
+    "required": [
+     "video_key",
+     "status",
+     "source_lang",
+     "duration",
+     "error",
+     "page_needed"
+    ],
+    "title": "VideoOut",
+    "type": "object"
+   },
+   "VideoVoicesOut": {
+    "properties": {
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     },
+     "voices": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Voices",
+      "type": "object"
+     }
+    },
+    "required": [
+     "total",
+     "voices"
+    ],
+    "title": "VideoVoicesOut",
+    "type": "object"
+   },
+   "VoiceOut": {
+    "properties": {
+     "changed": {
+      "title": "Changed",
+      "type": "boolean"
+     },
+     "description": {
+      "title": "Description",
+      "type": "string"
+     },
+     "gender": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gender"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "sample": {
+      "title": "Sample",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "label",
+     "name",
+     "description",
+     "gender",
+     "sample",
+     "changed"
+    ],
+    "title": "VoiceOut",
+    "type": "object"
+   },
+   "VoicedOut": {
+    "properties": {
+     "video_key": {
+      "title": "Video Key",
+      "type": "string"
+     },
+     "voices": {
+      "additionalProperties": {
+       "type": "number"
+      },
+      "title": "Voices",
+      "type": "object"
+     }
+    },
+    "required": [
+     "video_key",
+     "voices"
+    ],
+    "title": "VoicedOut",
+    "type": "object"
+   }
+  }
+ },
+ "info": {
+  "title": "VoxArbor UA: the userscript's API",
+  "version": "1"
+ },
+ "openapi": "3.1.0",
+ "paths": {
+  "/v1/audio/{h}.opus": {
+   "get": {
+    "operationId": "get_audio_v1_audio__h__opus_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "h",
+      "required": true,
+      "schema": {
+       "title": "H",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Audio"
+   }
+  },
+  "/v1/device/code": {
+   "post": {
+    "operationId": "device_code_v1_device_code_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DeviceCodeOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Device Code"
+   }
+  },
+  "/v1/device/token": {
+   "post": {
+    "operationId": "device_token_v1_device_token_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceTokenIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DeviceTokenOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DeviceWaitOut"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Device Token"
+   }
+  },
+  "/v1/videos": {
+   "get": {
+    "description": "Stored videos, most recently used first, with translated and voiced fractions.",
+    "operationId": "get_library_v1_videos_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "offset",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "minimum": 0,
+       "title": "Offset",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/LibraryVideoOut"
+         },
+         "title": "Response Get Library V1 Videos Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Library"
+   },
+   "post": {
+    "operationId": "post_video_v1_videos_post",
+    "parameters": [
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VideoIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VideoOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Video"
+   }
+  },
+  "/v1/videos/{key}/segments": {
+   "get": {
+    "operationId": "get_segments_v1_videos__key__segments_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "key",
+      "required": true,
+      "schema": {
+       "title": "Key",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "from",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "minimum": 0,
+       "title": "From",
+       "type": "number"
+      }
+     },
+     {
+      "in": "query",
+      "name": "window",
+      "required": false,
+      "schema": {
+       "default": 60,
+       "exclusiveMinimum": 0,
+       "maximum": 600.0,
+       "title": "Window",
+       "type": "number"
+      }
+     },
+     {
+      "in": "query",
+      "name": "voice",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Voice"
+      }
+     },
+     {
+      "in": "query",
+      "name": "mode",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "one",
+          "two",
+          "each"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Mode"
+      }
+     },
+     {
+      "in": "query",
+      "name": "lead_male",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Lead Male"
+      }
+     },
+     {
+      "in": "query",
+      "name": "lead_female",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Lead Female"
+      }
+     },
+     {
+      "in": "query",
+      "name": "paused",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "maximum": 1,
+       "minimum": 0,
+       "title": "Paused",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SegmentsOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Segments"
+   }
+  },
+  "/v1/videos/{key}/speakers": {
+   "get": {
+    "operationId": "get_speakers_v1_videos__key__speakers_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "key",
+      "required": true,
+      "schema": {
+       "title": "Key",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SpeakersViewOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Speakers"
+   }
+  },
+  "/v1/videos/{key}/speakers/{sid}": {
+   "put": {
+    "description": "A manual voice for one speaker; voice null returns it to the automatic rule.",
+    "operationId": "put_speaker_v1_videos__key__speakers__sid__put",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "key",
+      "required": true,
+      "schema": {
+       "title": "Key",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "sid",
+      "required": true,
+      "schema": {
+       "title": "Sid",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SpeakerVoiceIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SpeakerViewOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Put Speaker"
+   }
+  },
+  "/v1/videos/{key}/voices": {
+   "get": {
+    "description": "How many of the video's translated phrases have audio, per voice that has any.",
+    "operationId": "get_video_voices_v1_videos__key__voices_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "key",
+      "required": true,
+      "schema": {
+       "title": "Key",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VideoVoicesOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Video Voices"
+   }
+  },
+  "/v1/voiced": {
+   "get": {
+    "description": "Which voices the video at this address is voiced in already, and how much of it: the script offers a ready\none before it asks for the video in the viewer's own voice. Nothing is created or started.",
+    "operationId": "get_voiced_v1_voiced_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "url",
+      "required": true,
+      "schema": {
+       "title": "Url",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VoicedOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Voiced"
+   }
+  },
+  "/v1/voices": {
+   "get": {
+    "description": "Every voice but the ones switched off in the admin «Голоси»: the default one first, the rest by name.",
+    "operationId": "get_voices_v1_voices_get",
+    "parameters": [
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/VoiceOut"
+         },
+         "title": "Response Get Voices V1 Voices Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Voices"
+   }
+  },
+  "/v1/voices/{vid}/sample.opus": {
+   "get": {
+    "description": "The fixed phrase in this voice, synthesized once like any phrase (same audio store, LRU and hash).",
+    "operationId": "voice_sample_v1_voices__vid__sample_opus_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "vid",
+      "required": true,
+      "schema": {
+       "title": "Vid",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "authorization",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Authorization",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Voice Sample"
+   }
+  }
+ }
+}
