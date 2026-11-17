@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Обговорення
+    url: https://github.com/voxarbor/userscript/discussions
+    about: Питання, ідеї й відгуки, якщо це не помилка
+  - name: Спільнота в Telegram
+    url: https://t.me/+AnydDXHJOitjMmI0
+    about: Питання, допомога зі встановленням і новини VoxArbor
+  - name: Помилка вузла (VoxArbor Node)
+    url: https://github.com/voxarbor/node/issues
+    about: Якщо щось не так із вузлом на вашому ПК, а не зі скриптом
+  - name: Сайт VoxArbor
+    url: https://voxarbor.com
+    about: Що таке VoxArbor і як почати
