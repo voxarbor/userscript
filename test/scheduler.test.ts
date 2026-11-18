@@ -19,9 +19,14 @@ test('due: starts phrase within +-150 ms', () => {
   assert.deepEqual(ids(due(segs, 5.14, true)), [1]);
 });
 
+test('due: a phrase whose audio came a little late still starts, up to 600 ms into it (not skipped)', () => {
+  assert.deepEqual(ids(due(segs, 5.2, true)), [1]);
+  assert.deepEqual(ids(due(segs, 5.6, true)), [1]);
+});
+
 test('due: too early and too late phrases are not started', () => {
   assert.deepEqual(due(segs, 4.8, true), []);
-  assert.deepEqual(due(segs, 5.2, true), []);
+  assert.deepEqual(due(segs, 5.65, true), []);
   assert.deepEqual(due(segs, 6, true), []);
 });
 

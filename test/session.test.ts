@@ -451,6 +451,34 @@ test('audio of the voice before, arriving after the change, is not played', asyn
   assert.equal(p.sounds().length, 0);
 });
 
+test('a change of voices silences at once what the voice before has started or scheduled', async () => {
+  const p = page();
+  p.server.phrases = [phrase(0, 1, 3), phrase(1, 3.1, 5)];
+  p.session.start();
+  await p.pass(0);
+  await p.frame(1);
+  await p.frame(3); // the second one is scheduled ahead of its start
+  const old = p.sounds();
+  assert.ok(old.length >= 1);
+  p.settings.voice = 'anna';
+  p.session.voicesChanged();
+  assert.ok(old.every((x) => x.stopped), 'the old voice must not go on after the change');
+});
+
+test('a phrase whose audio arrives a little after its start is still heard, from where the video is', async () => {
+  const p = page();
+  p.server.slow = true;
+  p.server.phrases = [phrase(0, 0, 3)];
+  p.session.start();
+  await p.pass(0);
+  await p.frame(0.1); // its start: the audio is not here yet
+  assert.equal(p.sounds().length, 0);
+  await p.deliver();
+  await p.frame(0.4); // here now, 400 ms late: started that far into it, not skipped
+  assert.equal(p.sounds().length, 1);
+  assert.equal(p.sounds()[0]!.started!.offset, 0.4);
+});
+
 test('phrases asked for before a change of voices and answered after it are not taken', async () => {
   const p = page();
   Object.assign(p.server, { status: 'voicing', phrases: [phrase(0, 1, 3)] });

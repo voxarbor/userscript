@@ -238,6 +238,9 @@ export class VoiceoverSession {
     s.only = null;
     s.voices++;
     s.voicedUntil = null;
+    this.playback.stopSources(s); // the voice before is not heard a moment longer: what sounds or waits to, stops
+    s.done.clear();
+    s.failed.clear();
     s.bufs = new Map();
     s.segs.clear();
     s.list = [];

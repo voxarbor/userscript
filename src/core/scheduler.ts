@@ -2,6 +2,7 @@
 import type { Phrase } from './types';
 
 const TOLERANCE = 0.15; // start window around a phrase's start
+const LATE = 0.6; // a phrase whose audio came late still starts this far into it, rather than being skipped
 const MAX_SHIFT = 1; // the longest a phrase waits for the one before it
 const REFETCH_MARGIN = 20; // refetch when this close to the window end
 const FADE = 0.08; // s: a phrase cut short fades out this long instead of ending mid-word
@@ -12,10 +13,11 @@ const HOLD_HIGH = 10; // ... and resume once this much is ready (owner: 20 s mad
 const READY_SHARE = 0.8; // a video with this share of its phrases voiced in a voice is ready in it
 const STUCK_MS = 8000; // held this long with a voiced run further on: skip the phrase without audio
 
-/** Phrases to start now: within +-150 ms of their start, not handled yet. */
+/** Phrases to start now: from 150 ms before their start to 600 ms into it (audio that came a little late is heard
+ *  from there rather than skipped), not handled yet. */
 export function due<T extends Phrase>(segments: T[], t: number, playing: boolean, done?: { has(i: number): boolean } | null): T[] {
   if (!playing) return [];
-  return segments.filter((s) => !(done && done.has(s.i)) && Math.abs(s.start - t) <= TOLERANCE);
+  return segments.filter((s) => !(done && done.has(s.i)) && t >= s.start - TOLERANCE && t <= s.start + LATE);
 }
 
 /** The free time of seg's slot: from its start to the phrase after it in segments (sorted by start; to its own end
