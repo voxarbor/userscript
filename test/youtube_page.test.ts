@@ -86,17 +86,25 @@ test('the tracks sent besides the main one: the speech\'s own (the author\'s and
     { lang: 'es-419', kind: 'manual' },
     { lang: 'es', kind: 'asr' },
     { lang: 'en', kind: 'asr', translatedFrom: 'es' },
+    { lang: 'uk', kind: 'manual', translatedFrom: 'en' },
   ]);
   // the same vlog with nothing but YouTube's own recognition, which went as the main track
-  assert.deepEqual(extraTracks([t('es', 'asr')], { lang: 'es', subs: 'asr' }), [{ lang: 'en', kind: 'asr', translatedFrom: 'es' }]);
+  assert.deepEqual(extraTracks([t('es', 'asr')], { lang: 'es', subs: 'asr' }),
+    [{ lang: 'en', kind: 'asr', translatedFrom: 'es' }, { lang: 'uk', kind: 'asr', translatedFrom: 'es' }]);
   // English speech: the main track was the author's, YouTube's own comes too (it fills the author's gaps)
-  assert.deepEqual(extraTracks([t('en', 'asr'), t('en'), t('de')], { lang: 'en', subs: 'manual' }), [{ lang: 'en', kind: 'asr' }]);
-  assert.deepEqual(extraTracks([t('en', 'asr')], { lang: 'en', subs: 'asr' }), []);
+  assert.deepEqual(extraTracks([t('en', 'asr'), t('en'), t('de')], { lang: 'en', subs: 'manual' }),
+    [{ lang: 'en', kind: 'asr' }, { lang: 'uk', kind: 'manual', translatedFrom: 'en' }]);
+  assert.deepEqual(extraTracks([t('en', 'asr')], { lang: 'en', subs: 'asr' }), [{ lang: 'uk', kind: 'asr', translatedFrom: 'en' }]);
   // no recognition of YouTube's own: the speech's language is not known from the tracks; English still comes
-  assert.deepEqual(extraTracks([t('de'), t('en')], { lang: 'de', subs: 'manual' }), [{ lang: 'en', kind: 'manual' }]);
+  assert.deepEqual(extraTracks([t('de'), t('en')], { lang: 'de', subs: 'manual' }),
+    [{ lang: 'en', kind: 'manual' }, { lang: 'uk', kind: 'manual', translatedFrom: 'de' }]);
   assert.deepEqual(extraTracks([], null), []);
   // the main track was not had: every track wanted is asked for
-  assert.deepEqual(extraTracks([t('en', 'asr'), t('en')], null), [{ lang: 'en', kind: 'manual' }, { lang: 'en', kind: 'asr' }]);
+  assert.deepEqual(extraTracks([t('en', 'asr'), t('en')], null),
+    [{ lang: 'en', kind: 'manual' }, { lang: 'en', kind: 'asr' }, { lang: 'uk', kind: 'asr', translatedFrom: 'en' }]);
+  // Ukrainian: the author's when there is one; none for Ukrainian speech
+  assert.deepEqual(extraTracks([t('en', 'asr'), t('uk')], { lang: 'en', subs: 'asr' }), [{ lang: 'uk', kind: 'manual' }]);
+  assert.deepEqual(extraTracks([t('uk', 'asr')], { lang: 'uk', subs: 'asr' }), [{ lang: 'en', kind: 'asr', translatedFrom: 'uk' }]);
 });
 
 test('a track\'s address is the player\'s own request with the language, the kind and the translation changed', () => {

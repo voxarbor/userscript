@@ -70,8 +70,9 @@ export function pickCaption<T extends CaptionTrack>(tracks: T[], lang?: string |
 }
 
 /** The tracks the server gets besides the main one (`used`: the track that went as the main one, null: none did):
- *  the speech's own (the author's, then YouTube's recognition: the language of that one is the speech's) and
- *  English (the author's, then YouTube's translation of its recognition), each when the page has it. The server
+ *  the speech's own (the author's, then YouTube's recognition: the language of that one is the speech's),
+ *  English (the author's, then YouTube's translation of its recognition) and Ukrainian (the author's, then
+ *  YouTube's translation of the main track), each when the page has it. The server
  *  keeps translating what it did; the speech's own words are shown under the phrase and fill the author's gaps. */
 export function extraTracks(tracks: CaptionTrack[], used: { lang: string | null; subs: 'manual' | 'asr' } | null): WantedTrack[] {
   const base = (lang: string): string => lang.split('-')[0]!.toLowerCase();
@@ -88,6 +89,12 @@ export function extraTracks(tracks: CaptionTrack[], used: { lang: string | null;
     if (english) wanted.push({ lang: english.languageCode, kind: 'manual' });
     if (own) wanted.push({ lang: 'en', kind: 'asr', translatedFrom: own.languageCode });
   }
+  // Ukrainian: the author's, else YouTube's translation of the main track (else of its own recognition), the
+  // server's first translation
+  const from = used && used.lang ? { lang: used.lang, kind: used.subs } : own ? { lang: own.languageCode, kind: 'asr' as const } : null;
+  const ukrainian = authors('uk');
+  if (ukrainian) wanted.push({ lang: ukrainian.languageCode, kind: 'manual' });
+  else if (from && base(from.lang) !== 'uk' && speech !== 'uk') wanted.push({ lang: 'uk', kind: from.kind, translatedFrom: from.lang });
   return wanted.filter((w) => !(used && !w.translatedFrom && w.lang === used.lang && w.kind === used.subs));
 }
 
