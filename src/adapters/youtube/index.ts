@@ -1,7 +1,7 @@
 // YouTube (www and m.youtube.com, watch and shorts).
 import type { SiteAdapter } from '../types';
 import { Controls } from './mount';
-import { collectPage, hasUkrainianDub } from './page';
+import { collectPage, hasUkrainianDub, pageVideoId } from './page';
 
 function getVideo(): HTMLVideoElement | null {
   const shorts = location.pathname.startsWith('/shorts/');
@@ -29,8 +29,7 @@ export const youtubeAdapter: SiteAdapter = {
   collectPage,
   ukrainianDub: hasUkrainianDub,
   getVideoUrl() {
-    const id = new URLSearchParams(location.search).get('v') ||
-      (location.pathname.match(/^\/shorts\/([\w-]{11})/) || [])[1];
+    const id = pageVideoId(location);
     return id ? 'https://www.youtube.com/watch?v=' + id : null;
   },
   mountControls(buttons) {

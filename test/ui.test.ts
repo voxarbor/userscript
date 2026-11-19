@@ -6,10 +6,12 @@ import { MemoryPlatform } from '../src/platform/gm';
 import { SERVER, type Settings, SettingsStore } from '../src/settings/store';
 import { videoControls } from '../src/ui/controls';
 import { DubQuestion } from '../src/ui/dub';
+import { Previews } from '../src/ui/preview';
 import { ReadyQuestion } from '../src/ui/ready';
 import type { UiHost } from '../src/ui/host';
 import { Ui } from '../src/ui/ui';
 import { voiceSelect } from '../src/ui/widgets';
+import { installAudio } from './fake_audio';
 import { fake, type FakeElement, installDom } from './fake_dom';
 
 afterEach(() => {
@@ -494,4 +496,49 @@ test('«Діагностика» on «Основні»: «Копіювати ж�
   box.checked = true;
   box.fire('change');
   assert.deepEqual([settings.debug, saved().debug], [true, true]);
+});
+
+test('a sample plays in place of the one before; stopped while it was on its way, it never starts; no sound is kept running', async () => {
+  const contexts = installAudio();
+  const waiting: (() => void)[] = [];
+  const previews = new Previews({
+    api: { bytes: () => new Promise<ArrayBuffer>((give) => waiting.push(() => give(new ArrayBuffer(1000)))) } as unknown as UiHost['api'],
+    site: { getVideo: () => null, getPlayer: () => null },
+    audio: () => (contexts[0] as unknown as AudioContext | undefined) ?? new AudioContext(),
+  });
+  const first = previews.playClip('/a');
+  await settle();
+  assert.equal(contexts[0]!.state, 'running');
+  const second = previews.playClip('/b'); // another ▶ before the first sample has come
+  await settle();
+  waiting[0]!();
+  waiting[1]!();
+  await Promise.all([first, second]);
+  assert.equal(contexts[0]!.sources.length, 1); // only the one asked for last
+
+  const third = previews.playClip('/c');
+  assert.equal(contexts[0]!.sources[0]!.stopped, 'now');
+  await settle();
+  previews.stopClip(); // the window closes while the sample is on its way
+  waiting[2]!();
+  await third;
+  assert.deepEqual([contexts[0]!.sources.length, contexts[0]!.state], [1, 'running']); // nothing new was started
+
+  const fourth = previews.playClip('/d');
+  await settle();
+  waiting[3]!();
+  await fourth;
+  contexts[0]!.sources[1]!.onended!(); // played to its end
+  assert.equal(contexts[0]!.state, 'suspended');
+});
+
+test('the question about ready voices silences its sample when it goes', () => {
+  installDom();
+  let stopped = 0;
+  const question = new ReadyQuestion(async () => {}, () => stopped++);
+  question.drop();
+  assert.equal(stopped, 0); // no question, nothing to silence
+  question.ask({ ready: [{ voice: 'anna', label: 'Анна', share: 1, sample: '/s' }], own: 'Борис' }, () => {});
+  question.drop();
+  assert.equal(stopped, 1);
 });

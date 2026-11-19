@@ -111,7 +111,9 @@ export class ServerApi {
 
   private ask<T>(method: string, path: string, body: object | undefined, binary: boolean): Promise<T> {
     const { server, token } = this.access();
-    const url = /^https?:/.test(path) ? path : server.replace(/\/+$/, '') + path;
+    const home = server.replace(/\/+$/, '');
+    const url = /^https?:/.test(path) ? path : home + path;
+    const ours = url === home || url.startsWith(home + '/'); // the token goes to its own server only
     const began = this.now();
     const told = (result: string, more = ''): void =>
       this.trace(`${method} ${path.length > 160 ? path.slice(0, 160) + '…' : path} → ${result}, ${Math.round(this.now() - began)} ms${more}`);
@@ -123,7 +125,7 @@ export class ServerApi {
       const request: HttpRequest = {
         method,
         url,
-        headers: { Authorization: 'Bearer ' + token, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+        headers: { ...(ours ? { Authorization: 'Bearer ' + token } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
         timeout: TIMEOUT_MS,
         onload: (r) => {
           if (r.status < 200 || r.status >= 300) return fail(r.status, `HTTP ${r.status}`, r.responseText);

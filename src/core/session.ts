@@ -31,6 +31,9 @@ export interface SessionHost {
   openSettings(): void;
   /** A line for the diagnostic journal. */
   note(what: string): void;
+  /** The server refused the script's token and the voice-over was switched off. -> another tab has connected
+   *  the script since, and the voice-over was switched on again with that token: nothing to tell the person */
+  tokenRefused(): boolean;
 }
 
 /** The video opened on the server ahead of the switching on: asked for at `from` (video seconds) at the time

@@ -118,6 +118,7 @@ export class Poller {
       if (s.stopped) return;
       if (e.status === 401) {
         this.stop();
+        if (this.host.tokenRefused()) return;
         this.host.toast('Скрипт не підключено: натисніть «Підключити»');
         return this.host.openSettings();
       }

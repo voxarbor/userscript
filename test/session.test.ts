@@ -77,7 +77,8 @@ function page(over: Partial<Settings> = {}) {
     /** The openings are answered only by deliverOpen(). */
     slowOpen: false,
   };
-  const site = { url: VIDEO_A as string | null, video: video as FakeVideo | null, ad: false, page: null as PageData | null };
+  /** reconnected: another tab has connected the script meanwhile (a refused token is no news for the person). */
+  const site = { url: VIDEO_A as string | null, video: video as FakeVideo | null, ad: false, page: null as PageData | null, reconnected: false };
   /** The requests made, and what the session told the user, both in order. */
   const asked: string[] = [];
   const told: string[] = [];
@@ -134,6 +135,10 @@ function page(over: Partial<Settings> = {}) {
     voiceName: async (id) => 'name of ' + id,
     openSettings: () => told.push('settings'),
     note: (what) => notes.push(what),
+    tokenRefused: () => {
+      told.push('token refused');
+      return site.reconnected;
+    },
   };
 
   /** Lets time pass: the timers due in it fire, and what waited for an answer or an event goes on. */
@@ -637,9 +642,16 @@ test('a refused token switches the voice-over off and shows the settings', async
   p.server.down = new ApiError(401, 'HTTP 401');
   p.session.start();
   await p.pass(0);
-  assert.deepEqual(p.told, ['busy: Запуск озвучки…', 'idle', 'toast: Скрипт не підключено: натисніть «Підключити»', 'settings']);
+  assert.deepEqual(p.told, ['busy: Запуск озвучки…', 'idle', 'token refused', 'toast: Скрипт не підключено: натисніть «Підключити»', 'settings']);
   await p.pass(60_000);
   assert.deepEqual([p.session.on, p.asked.length], [false, 1]);
+
+  const other = page(); // another tab has connected the script meanwhile: the person is not sent to the settings
+  other.server.down = new ApiError(401, 'HTTP 401');
+  other.site.reconnected = true;
+  other.session.start();
+  await other.pass(0);
+  assert.deepEqual(other.told, ['busy: Запуск озвучки…', 'idle', 'token refused']);
 });
 
 test('a video the server gave up, or a request it refuses, switches the voice-over off with the reason', async () => {

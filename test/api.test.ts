@@ -57,6 +57,7 @@ test('audio is fetched as bytes, from the path the server gave or from a full ad
   assert.equal(sent[0]!.responseType, 'arraybuffer');
   assert.equal(sent[0]!.url, 'https://vox.test/v1/audio/ab.opus');
   assert.equal(sent[1]!.url, 'https://cdn.test/x.opus');
+  assert.deepEqual([sent[0]!.headers, sent[1]!.headers], [{ Authorization: 'Bearer tok' }, {}]); // the token stays with its server
 });
 
 test('a refusal carries its HTTP status; no answer at all has status 0', async () => {

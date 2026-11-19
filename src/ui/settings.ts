@@ -35,7 +35,9 @@ export class SettingsWindow {
     const body = el('div', { style: 'flex:1;overflow:auto;padding:0 22px 22px' });
     const bar = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' });
     const buttons: [TabId, HTMLButtonElement][] = [];
+    let shown = 0; // grows with every tab shown: a tab that loads slowly does not replace the one opened after it
     const show = async (id: TabId): Promise<void> => {
+      const turn = ++shown;
       for (const [tab, b] of buttons) {
         b.style.background = tab === id ? '#f1f1f1' : 'none';
         b.style.color = tab === id ? '#0f0f0f' : '#fff';
@@ -45,9 +47,10 @@ export class SettingsWindow {
       body.replaceChildren(note('Завантаження…'));
       try {
         const [list, voiced] = await Promise.all([this.voices(), this.videoVoices()]);
-        body.replaceChildren(...(await (id === 'voices' ? this.voicesTab(list, voiced) : this.speakersTab(list, voiced))));
+        const made = await (id === 'voices' ? this.voicesTab(list, voiced) : this.speakersTab(list, voiced));
+        if (turn === shown) body.replaceChildren(...made);
       } catch (e) {
-        body.replaceChildren(note('Не вдалося завантажити: ' + (e as Error).message));
+        if (turn === shown) body.replaceChildren(note('Не вдалося завантажити: ' + (e as Error).message));
       }
     };
     for (const [id, name] of TABS) {

@@ -7,8 +7,11 @@ import { playBtn } from './widgets';
 export class ReadyQuestion {
   private dialog: HTMLElement | null = null;
 
-  /** play(path): plays a voice's sample. */
-  constructor(private readonly play: (path: string) => Promise<void>) {}
+  /** play(path): plays a voice's sample; stop(): silences it (the question is gone). */
+  constructor(
+    private readonly play: (path: string) => Promise<void>,
+    private readonly stop: () => void = () => {},
+  ) {}
 
   /** The question is on the screen, not answered yet. */
   get asked(): boolean {
@@ -41,9 +44,12 @@ export class ReadyQuestion {
     (rows[0]!.firstChild as HTMLElement).focus();
   }
 
-  /** Takes the question away unanswered. */
+  /** Takes the question away unanswered; a sample that sounds for it stops. */
   drop(): void {
-    if (this.dialog) this.dialog.remove();
+    if (this.dialog) {
+      this.dialog.remove();
+      this.stop();
+    }
     this.dialog = null;
   }
 }

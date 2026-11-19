@@ -52,20 +52,46 @@ export function loadSettings(saved?: Partial<Settings> | null): Settings {
   return s;
 }
 
-/** The user's settings as the script manager keeps them. `current` is changed in place, then saved. */
+/** The user's settings as the script manager keeps them. `current` is changed in place, then saved. Every tab of
+ *  the browser has a store of its own over the same kept value: a save writes only what this tab changed over what
+ *  the others wrote meanwhile (an older tab's slider used to write its whole copy and with it the token of before
+ *  over a connection made in another tab), and refresh() takes the others' changes without writing. */
 export class SettingsStore {
   current: Settings;
+  /** The settings as this tab last read or wrote them: what differs from it in `current` was changed here. */
+  private base: Settings;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly platform: Pick<Platform, 'getValue' | 'setValue'>) {
     this.current = loadSettings(platform.getValue<Partial<Settings>>(KEY, {}));
+    this.base = { ...this.current };
   }
 
-  /** Writes the settings now (a write that was waiting goes with it). */
+  /** Takes what other tabs have written since: a setting not changed here gets the kept value, one changed here
+   *  stays. -> the names of the settings that are new here */
+  refresh(): (keyof Settings)[] {
+    const kept = loadSettings(this.platform.getValue<Partial<Settings>>(KEY, {}));
+    const fresh: (keyof Settings)[] = [];
+    const set = <K extends keyof Settings>(key: K): void => {
+      const mine = this.current[key] !== this.base[key];
+      if (!mine && kept[key] !== this.current[key]) {
+        this.current[key] = kept[key];
+        fresh.push(key);
+      }
+      if (!mine) this.base[key] = kept[key];
+    };
+    (Object.keys(kept) as (keyof Settings)[]).forEach(set);
+    return fresh;
+  }
+
+  /** Writes the settings now (a write that was waiting goes with it): what this tab changed, over what the
+   *  others wrote. */
   save(): void {
     clearTimeout(this.timer);
     this.timer = undefined;
+    this.refresh();
     this.platform.setValue(KEY, this.current);
+    this.base = { ...this.current };
   }
 
   /** Writes once the changes settle: a slider being dragged does not write at every step. */

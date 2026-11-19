@@ -12,7 +12,18 @@ export interface AudioTrack {
 
 export interface CaptionTrack {
   languageCode: string;
+  /** 'asr': YouTube's own recognition of the speech. */
   kind?: string;
+  /** As the player names it: «English (auto-generated)». */
+  name?: string;
+}
+
+/** A caption track to ask YouTube for. translatedFrom: YouTube's machine translation into `lang` of its own
+ *  recognition in that language. */
+export interface WantedTrack {
+  lang: string;
+  kind: 'manual' | 'asr';
+  translatedFrom?: string;
 }
 
 /** Original audio language: the original track (id suffix «.4»), else the default one that is no dub. YouTube's
@@ -44,4 +55,32 @@ export function pickCaption<T extends CaptionTrack>(tracks: T[], lang?: string |
   const track = tracks.find((t) => same(t) && t.kind !== 'asr') || tracks.find((t) => same(t)) ||
     tracks.find((t) => t.kind !== 'asr') || tracks[0];
   return track ? { track, subs: track.kind === 'asr' ? 'asr' : 'manual' } : null;
+}
+
+/** The tracks the server gets besides the main one (`used`: the track that went as the main one, null: none did):
+ *  the speech's own (the author's, then YouTube's recognition: the language of that one is the speech's) and
+ *  English (the author's, then YouTube's translation of its recognition), each when the page has it. The server
+ *  keeps translating what it did; the speech's own words are shown under the phrase and fill the author's gaps. */
+export function extraTracks(tracks: CaptionTrack[], used: { lang: string | null; subs: 'manual' | 'asr' } | null): WantedTrack[] {
+  const base = (lang: string): string => lang.split('-')[0]!.toLowerCase();
+  const own = tracks.find((x) => x.kind === 'asr');
+  const speech = own ? base(own.languageCode) : null;
+  const authors = (lang: string | null): CaptionTrack | undefined =>
+    (lang ? tracks.find((x) => x.kind !== 'asr' && base(x.languageCode) === lang) : undefined);
+  const wanted: WantedTrack[] = [];
+  const manual = authors(speech);
+  if (manual) wanted.push({ lang: manual.languageCode, kind: 'manual' });
+  if (own) wanted.push({ lang: own.languageCode, kind: 'asr' });
+  if (speech !== 'en') {
+    const english = authors('en');
+    if (english) wanted.push({ lang: english.languageCode, kind: 'manual' });
+    if (own) wanted.push({ lang: 'en', kind: 'asr', translatedFrom: own.languageCode });
+  }
+  return wanted.filter((w) => !(used && !w.translatedFrom && w.lang === used.lang && w.kind === used.subs));
+}
+
+/** Every track the player lists, as the server is told of them. */
+export function listed(tracks: CaptionTrack[]): { lang: string; kind: string | null; name: string | null }[] {
+  return tracks.slice(0, 300).map((x) => ({ lang: x.languageCode.slice(0, 40), kind: x.kind ? x.kind.slice(0, 20) : null,
+    name: x.name ? x.name.slice(0, 200) : null }));
 }

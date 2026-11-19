@@ -45,6 +45,18 @@ function wire(adapter: SiteAdapter): void {
   let voicesReq: Promise<Voice[]> | null = null;
   const voiceList = (): Promise<Voice[]> => (voicesReq ??= server.voices().catch((e) => { voicesReq = null; throw e; }));
 
+  // The voice-over on again with the connection as it is now (another token, or none).
+  const reconnect = (): void => {
+    voicesReq = null; // the voices are the server's answer to that connection
+    if (!session.on) return;
+    session.stop();
+    session.start(kept(adapter.getVideoUrl()) || null);
+  };
+  // Samples (the settings, the question about ready voices) sound through a context of their own, made at the
+  // first one: through the voice-over's, a sample let a phrase frozen by a pause sound on.
+  let samplesOut: AudioContext | null = null;
+  const samples = (): AudioContext => (samplesOut ??= new AudioContext());
+
   const session = new VoiceoverSession({
     settings: S,
     api: server,
@@ -54,6 +66,21 @@ function wire(adapter: SiteAdapter): void {
     voiceName: async (id: string): Promise<string> => (await voiceList().catch(() => [])).find((v) => v.id === id)?.label || id,
     openSettings: () => ui.openSettings(),
     note: (what) => journal.mark(what),
+    tokenRefused() {
+      // another tab may have connected the script since this one read its settings: then on again with that token
+      if (store.refresh().includes('token') && S.token) {
+        journal.mark('the token was refused; another tab has connected the script since: on again with its token');
+        voicesReq = null;
+        session.start(kept(adapter.getVideoUrl()) || null);
+        return true;
+      }
+      // the token is good no more: forgotten, so that the settings offer «Підключити» (they said «Підключено»)
+      if (S.token) {
+        S.token = S.account = '';
+        store.save();
+      }
+      return false;
+    },
   });
 
   const ui = new Ui({
@@ -61,7 +88,7 @@ function wire(adapter: SiteAdapter): void {
     api: server,
     site: adapter,
     videoKey: () => session.key,
-    audio: () => session.audio(),
+    audio: samples,
     onToggle: () => (session.on ? session.stop() : startChecked()),
     onVoiceVolume: () => session.voiceVolumeChanged(),
     onVoicesChanged() {
@@ -78,12 +105,16 @@ function wire(adapter: SiteAdapter): void {
       `server ${SERVER} · ${S.token ? 'connected' : 'not connected'} · page ${location.href}`,
       `settings ${JSON.stringify({ ...S, token: undefined, account: undefined })}`,
     ]),
-    onConnectionChanged() {
-      if (session.on) {
-        session.stop();
-        session.start(kept(adapter.getVideoUrl()) || null);
-      }
-    },
+    onConnectionChanged: reconnect,
+  });
+
+  // Another tab may have changed the settings, most of all connected the script (the panel's «Скрипт» page does it
+  // in a tab of its own): they are taken when this tab is looked at again.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    const fresh = store.refresh();
+    if (fresh.includes('token')) reconnect();
+    if (fresh.includes('voiceVolume')) session.voiceVolumeChanged();
   });
 
   // A video with YouTube's own Ukrainian audio track: ask before voicing it. «Озвучити» is remembered per video id.
@@ -103,29 +134,34 @@ function wire(adapter: SiteAdapter): void {
     if (!dub) return void startReady(url); // a track is only looked for on a video's page
     dubQuestion.ask((go) => {
       if (!go || adapter.getVideoUrl() !== url) return;
-      platform.setValue('ukDubOk', ok.concat(url).slice(-DUB_OK_MAX));
+      // read again: another tab may have added a video while the question stood
+      platform.setValue('ukDubOk', platform.getValue<string[]>('ukDubOk', []).filter((u) => u !== url).concat(url).slice(-DUB_OK_MAX));
       void startReady(url);
     });
   }
 
   // A video that is ready in other voices (owner): offer them before it is voiced anew in the viewer's own. The
   // voice taken holds for this video only and is remembered ('' : «anew in my own»); the settings stay as they are.
-  const readyQuestion = new ReadyQuestion((path) => new Previews({ api: server, site: adapter, audio: () => session.audio() }).playClip(path));
+  const sample = new Previews({ api: server, site: adapter, audio: samples }); // one: a new ▶ stops the sample before
+  const readyQuestion = new ReadyQuestion((path) => sample.playClip(path), () => sample.stopClip());
   const taken = (): [string, string][] => platform.getValue<[string, string][]>('videoVoice', []);
   const kept = (url: string | null): string | undefined => taken().find(([u]) => u === url)?.[1];
   const take = (url: string, voice: string): void =>
     platform.setValue('videoVoice', [...taken().filter(([u]) => u !== url), [url, voice]].slice(-TAKEN_MAX));
-  let looking = false; // the server is being asked what is ready
+  let looking: string | null = null; // the video the server is being asked about (what is ready for it)
+  let asking = 0; // grows with every such asking and when the page goes to another video: an older answer is dropped
   async function startReady(url: string): Promise<void> {
-    if (looking) return;
+    if (looking === url) return;
     const before = kept(url);
-    looking = true;
+    const mine = ++asking;
+    looking = url;
     ui.setState('busy', 'Запуск озвучки…');
     // the video is opened on the server at once, while the server is asked what is ready (owner: one request after
     // the other made the start slow); the voice-over that starts below takes that answer
     session.prepare(before || null);
     const offer = await readyOffer({ voiced: (u) => server.voiced(u), voices: () => ui.voices() }, url, S, before);
-    looking = false;
+    if (mine !== asking) return; // the page went to another video meanwhile (the button there is not kept busy)
+    looking = null;
     if (session.on) return;
     ui.setState('idle');
     if (adapter.getVideoUrl() !== url) return; // the viewer went on meanwhile
@@ -139,9 +175,16 @@ function wire(adapter: SiteAdapter): void {
   }
 
   // SPA navigation (called by the adapter; watch() also stops a session whose video changed): drop all state.
+  let lastUrl = adapter.getVideoUrl();
   function onNavigate(): void {
+    const url = adapter.getVideoUrl();
+    if (url && url === lastUrl) return; // the same video (a link to another moment of it): nothing to drop
+    lastUrl = url;
     journal.mark(`navigation: ${location.href}`);
+    asking++;
+    looking = null;
     session.stop();
+    ui.setState('idle'); // also when nothing was on yet: the button was busy while the server was asked
     dubQuestion.drop(); // the questions were about the previous video
     readyQuestion.drop();
     ui.closeQuick();
@@ -162,6 +205,8 @@ function wire(adapter: SiteAdapter): void {
   }
 
   function watch(): void {
+    // a page that went to another video without telling (the site's event did not come) is noticed here
+    if (adapter.getVideoUrl() !== lastUrl) return onNavigate();
     if (session.lostVideo) session.stop();
     mount();
   }
