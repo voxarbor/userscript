@@ -1,7 +1,7 @@
 // What sounds: the phrases started at their times, the original's volume under them, and the video held back
 // while too little is voiced.
 import type { Segment } from '../api/client';
-import { due, fadeStop, foreignVolume, holdStep, isDucked, mustWait, nextStart, ramp, roomOf, shouldDuck, voiceAhead } from './scheduler';
+import { due, fadeStop, firstToHear, foreignVolume, holdStep, isDucked, mustWait, nextStart, ramp, roomOf, shouldDuck, voiceAhead } from './scheduler';
 import type { Run, SessionHost } from './session';
 
 const DUCK_TIME = 0.25;
@@ -104,7 +104,7 @@ export class Playback {
     s.prepped = true;
     const v = s.video;
     const t = v.currentTime;
-    const first = s.list.find((x) => !!x.audio && x.end > t);
+    const first = firstToHear(s.list, t); // a phrase that is nearly over would not be joined: not waited for either
     if (s.status !== 'ready' || !first || first.start - t > PREP_NEAR || s.bufs.get(first.i)) return;
     if (this.host.site.inAd && this.host.site.inAd(v)) return;
     s.prep = { i: first.i, since: Date.now() };

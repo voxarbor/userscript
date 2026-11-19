@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import { originalLang, pickCaption, ukrainianDub } from '../src/adapters/youtube/captions';
-import { due, nextStart, roomOf, readyVoices, needFetch, bufferedAhead, ramp, shouldDuck, mustWait, isDucked, foreignVolume, nextToLoad, reusable, voiceAhead, voiceMode, windowIncomplete, voicedAfterGap, fadeStop, holdStep, outOfReach, preparedPercent } from '../src/core/scheduler';
+import { due, firstToHear, nextStart, roomOf, readyVoices, needFetch, bufferedAhead, ramp, shouldDuck, mustWait, isDucked, foreignVolume, nextToLoad, reusable, voiceAhead, voiceMode, windowIncomplete, voicedAfterGap, fadeStop, holdStep, outOfReach, preparedPercent } from '../src/core/scheduler';
 import { groupVoices, voicedMark, fmtDur } from '../src/ui/format';
 
 const seg = (i: number, start: number, end: number, audio: string | null = `/v1/audio/${i}.opus`) => ({ i, start, end, uk: 'x', audio });
@@ -52,6 +52,16 @@ test('due: what is left of a phrase is counted to the end of its audio, and no f
   assert.deepEqual(due(close, 2.5, true, null, long), []); // half a second until phrase 1: not worth starting
   assert.deepEqual(ids(due(close, 2.25, true, null, long)), [0]);
   assert.deepEqual(ids(due(close, 3.05, true, null, long)), [1]); // phrase 1 has begun: phrase 0 is not joined
+});
+
+test('firstToHear: the first voiced phrase that can still be heard: not begun yet, or with 0.7 s of its slot left', () => {
+  const list = [seg(0, 1, 3), seg(1, 5, 8), seg(2, 10, 12, null), seg(3, 14, 16)];
+  assert.equal(firstToHear(list, 0)!.i, 0);
+  assert.equal(firstToHear(list, 2.25)!.i, 0); // 0.75 s of it left
+  assert.equal(firstToHear(list, 2.5)!.i, 1); // half a second left: the one after it is the first to be heard
+  assert.equal(firstToHear(list, 8)!.i, 3); // the unvoiced one is passed over
+  assert.equal(firstToHear(list, 15.5), null);
+  assert.equal(firstToHear([seg(0, 1, 9), seg(1, 3, 6)], 2.5)!.i, 1); // its slot ends where the next phrase starts
 });
 
 test('due: a phrase whose audio is not here yet is not due', () => {

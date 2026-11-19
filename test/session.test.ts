@@ -893,6 +893,13 @@ test('the video is not held back when nothing is to be waited for: no phrase nea
   await far.pass(0);
   assert.deepEqual([far.video.paused, far.told.at(-1)], [false, 'on: 100%']);
 
+  const over = page();
+  Object.assign(over.server, { windows: true, slow: true, phrases: [phrase(0, 10, 12.5), phrase(1, 14, 16)] });
+  over.video.currentTime = 12; // half a second of the phrase here is left: it would not be joined, so it is not waited for
+  over.session.start();
+  await over.pass(0);
+  assert.equal(over.video.paused, false);
+
   const voicing = page({ waitForVoice: false });
   Object.assign(voicing.server, { windows: true, slow: true, status: 'voicing', phrases: [phrase(0, 10, 16)] });
   voicing.video.currentTime = 12;

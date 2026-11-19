@@ -39,6 +39,15 @@ export function due<T extends Phrase>(
   });
 }
 
+/** The first voiced phrase that can still be heard at t (segments sorted by start): one not begun yet, or one
+ *  with MIN_REST of its slot left (to its end, or to where the next phrase starts), as due() would join it. */
+export function firstToHear<T extends Phrase>(segments: T[], t: number): T | null {
+  return segments.find((s, k) => {
+    const after = segments[k + 1];
+    return !!s.audio && (s.start > t || Math.min(s.end, after ? after.start : Infinity) - t >= MIN_REST);
+  }) || null;
+}
+
 /** The free time of seg's slot: from its start to the phrase after it in segments (sorted by start; to its own end
  *  when it is the last), less its audio of `duration` seconds. 0 when the audio fills the slot or runs over it. */
 export function roomOf<T extends Phrase>(seg: T, duration: number, segments: T[]): number {
