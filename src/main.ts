@@ -41,13 +41,8 @@ function wire(adapter: SiteAdapter): void {
   const server = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }), (line) => journal.mark(line));
   let unmount: (() => void) | null = null; // takes the buttons out of the page
 
-  // the voices once a page (the settings' list): a name to show for an id
-  let voicesReq: Promise<Voice[]> | null = null;
-  const voiceList = (): Promise<Voice[]> => (voicesReq ??= server.voices().catch((e) => { voicesReq = null; throw e; }));
-
   // The voice-over on again with the connection as it is now (another token, or none).
   const reconnect = (): void => {
-    voicesReq = null; // the voices are the server's answer to that connection
     if (!session.on) return;
     session.stop();
     session.start(kept(adapter.getVideoUrl()) || null);
@@ -63,14 +58,13 @@ function wire(adapter: SiteAdapter): void {
     site: adapter,
     setState: (state, text) => ui.setState(state, text),
     toast,
-    voiceName: async (id: string): Promise<string> => (await voiceList().catch(() => [])).find((v) => v.id === id)?.label || id,
+    voiceName: async (id: string): Promise<string> => (await ui.voices().catch((): Voice[] => [])).find((v) => v.id === id)?.label || id,
     openSettings: () => ui.openSettings(),
     note: (what) => journal.mark(what),
     tokenRefused() {
       // another tab may have connected the script since this one read its settings: then on again with that token
       if (store.refresh().includes('token') && S.token) {
         journal.mark('the token was refused; another tab has connected the script since: on again with its token');
-        voicesReq = null;
         session.start(kept(adapter.getVideoUrl()) || null);
         return true;
       }

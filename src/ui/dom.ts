@@ -17,6 +17,31 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return e;
 }
 
+/** Where a window of the script is seen: the page, or the element shown full screen when that is not the whole
+ *  page (a player shown full screen hides everything outside it; a <video> takes no children). */
+function stage(): HTMLElement {
+  const full = document.fullscreenElement;
+  return full && full.tagName !== 'VIDEO' && !full.contains(document.body) ? (full as HTMLElement) : document.body;
+}
+
+/** Puts a window of the script (the settings, a question, a toast) where it is seen, and moves it there again
+ *  whenever full screen begins or ends, for as long as it is in the page. */
+export function overPage(node: HTMLElement): void {
+  const follow = (): void => {
+    if (!node.isConnected) return document.removeEventListener('fullscreenchange', follow);
+    if (node.parentNode !== stage()) stage().append(node);
+  };
+  document.addEventListener('fullscreenchange', follow);
+  stage().append(node);
+}
+
+/** Keeps keys (space, arrows) and presses made in a window of the script away from the player, which may be
+ *  around it: it would pause, seek or leave full screen on them. */
+export function shield(node: HTMLElement): void {
+  for (const ev of ['keydown', 'keyup', 'keypress', 'click', 'dblclick', 'mousedown', 'mouseup', 'pointerdown',
+    'pointerup', 'touchstart', 'touchend', 'wheel']) node.addEventListener(ev, (e) => e.stopPropagation());
+}
+
 // Material icons (Apache 2.0): translate for the voice-over button, tune for its quick settings (not a gear, so
 // it isn't confused with YouTube's settings button next to it).
 export const ICON_TRANSLATE = 'M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17' +
@@ -62,6 +87,7 @@ export function toast(message: string, action?: ToastAction): void {
     });
     d.append(b);
   }
-  document.body.append(d);
+  shield(d);
+  overPage(d);
   setTimeout(() => d.remove(), action ? 12000 : 6000);
 }

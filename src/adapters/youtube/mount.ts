@@ -1,13 +1,15 @@
-// Where the script's buttons live on YouTube: the desktop player's bar, the phone's top control row, or a capsule
-// over the player (shorts and other layouts).
+// Where the script's buttons live on YouTube: the desktop player's bar, YouTube's own row of controls over the
+// player's top (a phone's video, a short on a computer), or a capsule over the player (other layouts).
 
-type Mode = 'bar' | 'mtop' | 'overlay' | 'float';
+type Mode = 'bar' | 'top' | 'overlay' | 'float';
 
 const isShorts = (): boolean => location.pathname.startsWith('/shorts/');
 
-/** m.youtube.com's top control row, when the page has it (it appears once the player has started). */
-function mobileTop(): HTMLElement | null {
-  return isShorts() ? null : document.querySelector<HTMLElement>('#player-control-container .player-controls-top');
+/** YouTube's own row of controls over the player's top right corner, when the page has one: m.youtube.com's on a
+ *  video (it appears once the player has started), the right half of a short's on a computer. */
+function topRow(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(isShorts() ? 'ytd-shorts-player-controls #right-controls'
+    : '#player-control-container .player-controls-top');
 }
 
 /** A button keeps only its state colour (set by the core); the rest of its look is the place's. */
@@ -27,50 +29,60 @@ export class Controls {
   constructor(private readonly player: () => HTMLElement | null) {}
 
   mount(buttons: HTMLElement[]): void {
-    // Desktop player: our buttons get their own capsule left of YouTube's right controls. The capsule carries
-    // YouTube's own class, so the player's CSS gives it the same look, button sizes, hover pill and big-mode
-    // sizes (other extensions looking for that class may find ours first).
-    const bar = !isShorts() && document.querySelector('#movie_player .ytp-right-controls:not([data-vot])');
-    if (bar) {
-      const group = this.own('bar');
-      for (const b of buttons) restyle(b, 'ytp-button', {}); // YouTube's CSS styles .ytp-button
-      group.replaceChildren(...buttons);
-      bar.before(group);
-      return;
-    }
-    // Phones (m.youtube.com): YouTube's top control row (autoplay, captions, settings) lives outside the player,
-    // over its top right corner. Our buttons go into that row before YouTube's own, so they never overlap them
-    // and show and hide with YouTube's controls (also in full screen).
-    const top = mobileTop();
-    if (top) {
-      const group = this.own('mtop');
-      for (const b of buttons) {
+    const place = this.place();
+    const group = this.own(place.mode);
+    for (const b of buttons) {
+      if (place.mode === 'bar') {
+        restyle(b, 'ytp-button', {}); // YouTube's CSS styles .ytp-button
+      } else if (place.mode === 'top') {
         restyle(b, '', { flex: 'none', width: '48px', height: '48px', padding: '0', border: '0',
           background: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'pointer', filter: 'drop-shadow(0 0 2px rgba(0,0,0,.8))' });
+      } else {
+        restyle(b, '', { flex: 'none', width: '40px', height: '40px', padding: '0', border: '0', borderRadius: '20px',
+          background: 'rgba(0,0,0,.6)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer' });
       }
-      group.replaceChildren(...buttons);
-      top.prepend(group);
-      return;
-    }
-    // Shorts and other layouts without either bar: a capsule in the player's top right corner, shown on a tap
-    // like YouTube's own controls. No player: one floating capsule above YouTube's bottom bar.
-    const player = this.player();
-    const group = this.own(player ? 'overlay' : 'float');
-    for (const b of buttons) {
-      restyle(b, '', { flex: 'none', width: '40px', height: '40px', padding: '0', border: '0', borderRadius: '20px',
-        background: 'rgba(0,0,0,.6)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer' });
     }
     group.replaceChildren(...buttons);
-    (player || document.body).append(group);
-    if (player) this.autoHide(player);
+    if (place.bar) place.bar.before(group);
+    else if (place.mode === 'top') place.into.prepend(group);
+    else place.into.append(group);
+    if (place.mode === 'overlay') this.autoHide(place.into);
   }
 
-  /** The buttons should move: the phone's top row renders late, after they went into a capsule. */
+  /** The buttons are not where they belong now. YouTube's top row renders late, after they went into a capsule;
+   *  a computer's page goes between a video and a short without a load and keeps the player it left, hidden, with
+   *  the buttons in it (seen on youtube.com: after a short they stayed in its player, 0 px wide). */
   wantsRemount(): boolean {
-    const mode = this.group && this.group.dataset.vot;
-    return !!this.group && mode !== 'mtop' && mode !== 'bar' && !!mobileTop();
+    if (!this.group) return false;
+    const place = this.place();
+    return this.group.dataset.vot !== place.mode || this.group.parentElement !== place.into;
+  }
+
+  /** The quick settings belong under the buttons: they are in a short's top row on a computer, and the short's
+   *  name and channel lie over the player's bottom (seen on youtube.com: they took the presses meant for the
+   *  panel's last rows). */
+  panelAtTop(): boolean {
+    return isShorts() && !!this.group && this.group.dataset.vot === 'top';
+  }
+
+  /** Where the buttons belong on the page as it is now: the capsule's mode and the element it is put into. */
+  private place(): { mode: Mode; into: HTMLElement; bar?: Element } {
+    // Desktop player: our buttons get their own capsule left of YouTube's right controls. The capsule carries
+    // YouTube's own class, so the player's CSS gives it the same look, button sizes, hover pill and big-mode
+    // sizes (other extensions looking for that class may find ours first).
+    const bar = isShorts() ? null : document.querySelector('#movie_player .ytp-right-controls:not([data-vot])');
+    if (bar && bar.parentElement) return { mode: 'bar', into: bar.parentElement, bar };
+    // Phones (m.youtube.com) and a short on a computer: YouTube's top control row (captions, settings, full
+    // screen) lives outside the player, over its top right corner. Our buttons go into that row before YouTube's
+    // own, so they never overlap them and show and hide with YouTube's controls (also in full screen).
+    const top = topRow();
+    if (top) return { mode: 'top', into: top };
+    // A short on a phone and other layouts without either: a capsule in the player's top right corner, shown on a
+    // tap like YouTube's own controls. No player: one floating capsule above YouTube's bottom bar.
+    const player = this.player();
+    return player ? { mode: 'overlay', into: player } : { mode: 'float', into: document.body };
   }
 
   unmount(): void {
@@ -86,8 +98,9 @@ export class Controls {
     if (mode === 'bar') {
       g.className = 'ytp-right-controls';
       g.style.marginRight = '8px';
-    } else if (mode === 'mtop') {
-      Object.assign(g.style, { display: 'flex', flex: 'none', alignItems: 'center' });
+    } else if (mode === 'top') {
+      // a short's row on a computer lets presses through to the video and only its own buttons take them
+      Object.assign(g.style, { display: 'flex', flex: 'none', alignItems: 'center', pointerEvents: 'auto' });
     } else {
       Object.assign(g.style, { display: 'flex', gap: '8px', zIndex: mode === 'overlay' ? '60' : '2147483646',
         transition: 'opacity .2s', position: mode === 'overlay' ? 'absolute' : 'fixed',

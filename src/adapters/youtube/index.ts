@@ -37,6 +37,7 @@ export const youtubeAdapter: SiteAdapter = {
     return () => controls.unmount();
   },
   wantsRemount: () => controls.wantsRemount(),
+  panelAtTop: () => controls.panelAtTop(),
   onNavigate(listener) {
     document.addEventListener('yt-navigate-finish', listener);
     return () => document.removeEventListener('yt-navigate-finish', listener);

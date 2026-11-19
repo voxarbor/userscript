@@ -64,6 +64,33 @@ test('a script connected to another account is not switched silently: the page a
   assert.equal(box.dataset.state, 'connected');
 });
 
+test('«Підключити до цього» pressed twice: the one-time code is sent once and the page says «connected»', async () => {
+  const { box, slots } = page();
+  const settings = { token: 'vxa_bob', account: 'bob · Firefox · Windows' };
+  const asked: string[] = [];
+  // the server as it is: the code is good for one token, a second asking is refused
+  const h: LinkHost = {
+    settings,
+    api: {
+      deviceToken: async (body) => {
+        asked.push(body.device_code);
+        await Promise.resolve();
+        if (asked.length > 1) throw new ApiError(400, 'HTTP 400', JSON.stringify({ error: 'expired_token' }));
+        return { token: 'vxa_new', login: 'ann', name: 'Firefox · Windows' };
+      },
+    },
+    saved: () => asked.push('saved'),
+  };
+  await autoLink(box, h);
+  const press = slots['#script-relink']!.onclick as () => Promise<void>;
+  await Promise.all([press(), press()]); // a double click: the second comes while the first is on its way
+  await press(); // and one after the script is connected
+  assert.deepEqual(asked, ['dev-once', 'saved']);
+  assert.equal(settings.token, 'vxa_new');
+  assert.equal(box.dataset.state, 'connected');
+  assert.equal(slots['[data-slot="error"]']!.textContent, '');
+});
+
 test('a code the server refuses: the page says it failed, the old connection stays', async () => {
   const { box, slots } = page();
   const settings = { token: '', account: '' };

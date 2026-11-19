@@ -5,6 +5,7 @@ import { ApiError, type SpeakersView, type SpeakerView, type Voice } from '../sr
 import { MemoryPlatform } from '../src/platform/gm';
 import { SERVER, type Settings, SettingsStore } from '../src/settings/store';
 import { videoControls } from '../src/ui/controls';
+import { toast } from '../src/ui/dom';
 import { DubQuestion } from '../src/ui/dub';
 import { Previews } from '../src/ui/preview';
 import { ReadyQuestion } from '../src/ui/ready';
@@ -355,7 +356,8 @@ test('the speakers tab: the video\'s speakers; a voice for one goes to the serve
 
 test('the quick settings open by «tune» over a tall player, else at the page\'s bottom, and close by it', () => {
   let player: FakeElement | null = null;
-  const { doc, tune, layers } = page({ site: { getVideo: () => null, getPlayer: () => player as unknown as HTMLElement } });
+  let atTop = false;
+  const { doc, tune, layers } = page({ site: { getVideo: () => null, getPlayer: () => player as unknown as HTMLElement, panelAtTop: () => atTop } });
   tune.fire('click');
   assert.match(layers()[0]!.style.cssText!, /^position:fixed;bottom:12px;left:12px;right:12px;max-width:420px;margin-left:auto;/);
   assert.equal(layers()[0]!.children.length, 6);
@@ -369,6 +371,13 @@ test('the quick settings open by «tune» over a tall player, else at the page\'
   assert.match(player.children[0]!.style.cssText!, /^position:absolute;bottom:64px;right:12px;width:min\(340px,calc\(100% - 24px\)\);/);
   tune.fire('click');
   assert.equal(player.children.length, 0);
+
+  // a short on a computer: the buttons are at the player's top and YouTube's own things lie over its bottom
+  atTop = true;
+  tune.fire('click');
+  assert.match(player.children[0]!.style.cssText!, /^position:absolute;top:72px;right:12px;width:min\(340px,calc\(100% - 24px\)\);max-height:calc\(100% - 184px\);/);
+  tune.fire('click');
+  atTop = false;
 
   player.clientHeight = 200; // a phone's portrait player
   tune.fire('click');
@@ -642,4 +651,100 @@ test('a speaker\'s own words: the video goes to them and plays, the voice-over i
   assert.deepEqual([told.slice(2), video.paused], [['original true', 'original false'], false]);
   previews.stopOriginal(); // nothing plays: nothing to tell
   assert.equal(told.length, 4);
+});
+
+test('the voices are the server\'s answer to a connection: asked once, and again once the script is connected otherwise', async () => {
+  const { h, ui, settings, layers, tabs } = page();
+  let asked = 0;
+  h.api.voices = async () => (++asked === 1 ? VOICES : [voice('olha', 'female', 'Ольга')]);
+  assert.deepEqual((await ui.voices()).map((v) => v.id), ['borys', 'anna', 'robot']);
+  await ui.voices();
+  assert.equal(asked, 1);
+  settings.token = 'vxa_other'; // connected in the settings, in another tab, or the token was refused and forgotten
+  assert.deepEqual((await ui.voices()).map((v) => v.id), ['olha']);
+  await ui.voices();
+  assert.equal(asked, 2);
+  ui.openSettings();
+  tabs()[1]!.fire('click');
+  await settle();
+  assert.deepEqual(texts(layers()[0]!.all('span')).filter((t) => ['Борис', 'Ольга'].includes(t)), ['Ольга']); // no reload of the page needed
+});
+
+test('a failed asking for the voices is not kept; an answer that comes after the connection changed is not either', async () => {
+  const { h, ui, settings } = page();
+  const answers: ((list: Voice[] | null) => void)[] = [];
+  h.api.voices = () => new Promise((done, fail) => answers.push((list) => (list ? done(list) : fail(new Error('lost')))));
+  const first = ui.voices();
+  settings.token = 'vxa_other';
+  const second = ui.voices();
+  assert.equal(answers.length, 2);
+  answers[0]!(null); // the old connection's asking fails late: the new one's is kept
+  await assert.rejects(first, /lost/);
+  assert.equal(ui.voices(), second);
+  answers[1]!(null);
+  await assert.rejects(second, /lost/);
+  void ui.voices().catch(() => {});
+  assert.equal(answers.length, 3); // asked again
+});
+
+/** A player shown full screen: what is outside it is not seen. */
+function fullScreen(doc: ReturnType<typeof installDom>): FakeElement {
+  const player = doc.createElement('div');
+  doc.body.append(player);
+  doc.fullscreenElement = player;
+  return player;
+}
+
+test('a player shown full screen: the questions, the settings window, the quick settings and the toasts go into it', async () => {
+  vi.useFakeTimers();
+  const { doc, ui, tune, layers } = page();
+  const player = fullScreen(doc);
+  const question = new DubQuestion();
+  question.ask(() => {});
+  assert.deepEqual(player.children.map((e) => e.role), ['dialog']);
+  question.drop();
+  ui.openSettings();
+  assert.match(player.children[0]!.textContent, /^VoxArbor UA/);
+  // the player takes clicks for pause and full screen: one made in the window is not its business
+  assert.deepEqual(['click', 'dblclick', 'pointerdown', 'wheel'].map((type) => player.children[0]!.fire(type).stopped), [true, true, true, true]);
+  ui.closeSettings();
+  tune.fire('click');
+  assert.match(player.children[0]!.style.cssText!, /^position:fixed;bottom:12px/);
+  tune.fire('click');
+  toast('Відео не знайдено');
+  assert.equal(player.children[0]!.textContent, 'VoxArbor UA: Відео не знайдено');
+  assert.equal(player.children[0]!.fire('click').stopped, true);
+  await vi.advanceTimersByTimeAsync(6000);
+  assert.deepEqual([player.children.length, layers().filter((e) => e !== player).length], [0, 0]);
+});
+
+test('full screen begins or ends while a window of the script is open: the window follows', async () => {
+  const { doc, ui, layers } = page();
+  ui.openSettings();
+  const win = layers()[0]!;
+  const player = fullScreen(doc);
+  doc.fire('fullscreenchange');
+  assert.equal(win.parentNode, player);
+  doc.fullscreenElement = null;
+  doc.fire('fullscreenchange');
+  assert.equal(win.parentNode, doc.body);
+  ui.closeSettings();
+  fullScreen(doc);
+  doc.fire('fullscreenchange'); // a window that was closed is not brought back
+  assert.equal(win.parentNode, null);
+});
+
+test('the whole page shown full screen (YouTube on a computer) or a bare <video>: the windows stay in the page', () => {
+  const { doc, ui, layers } = page();
+  const html = doc.createElement('html');
+  html.append(doc.body);
+  doc.fullscreenElement = html;
+  ui.openSettings();
+  assert.equal(layers().length, 1);
+  ui.closeSettings();
+  const video = doc.createElement('VIDEO'); // an element names its tag in capitals
+  doc.body.append(video);
+  doc.fullscreenElement = video; // nothing can be put into a <video>
+  ui.openSettings();
+  assert.deepEqual([video.children.length, layers().filter((e) => e !== video).length], [0, 1]);
 });

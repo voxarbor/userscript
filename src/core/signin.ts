@@ -12,6 +12,9 @@ export interface SignInHost {
   /** Opens a page of the site in a tab of its own (never in YouTube's page). */
   openTab(url: string): void;
   wait(ms: number): Promise<void>;
+  /** The clock, in ms (Date.now): the code's time is counted by it, so it also runs while a poll hangs without a
+   *  network and while the computer sleeps. */
+  now(): number;
 }
 
 /** Why the server gives no token yet: RFC 8628's word from a refusal's body; '' for anything else. */
@@ -31,12 +34,13 @@ export type Connected = Awaited<ReturnType<ServerApi['deviceToken']>>;
  *  show, so that the person can see it is the one on the site. */
 export async function signIn(host: SignInHost, name: string, shown: (code: string) => void): Promise<Connected> {
   const told = await host.api.deviceCode({ name });
+  const ends = host.now() + told.expires_in * 1000;
   shown(told.user_code);
   host.openTab(`${SERVER}/panel/connect?code=${encodeURIComponent(told.user_code)}`);
   let gap = told.interval;
-  for (let waited = 0; waited < told.expires_in; ) {
-    await host.wait(gap * 1000);
-    waited += gap;
+  while (host.now() < ends) {
+    await host.wait(Math.min(gap * 1000, ends - host.now()));
+    if (host.now() >= ends) break; // the wait (or the poll before it) took the rest of the code's time
     try {
       return await host.api.deviceToken({ device_code: told.device_code });
     } catch (e) {

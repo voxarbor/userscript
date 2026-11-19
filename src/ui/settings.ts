@@ -3,7 +3,7 @@
 // panel «Голоси».
 import type { VideoVoices, Voice } from '../api/client';
 import { deviceName, signIn } from '../core/signin';
-import { el } from './dom';
+import { el, overPage, shield } from './dom';
 import { fmtDur, groupVoices, voicedMark } from './format';
 import type { UiHost } from './host';
 import { Previews } from './preview';
@@ -72,11 +72,11 @@ export class SettingsWindow {
     this.win = { root, show };
     root.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);' + PANEL_CSS +
       ';width:min(900px,94vw);height:min(640px,88vh);display:flex;flex-direction:column;overflow:hidden';
+    shield(root); // the site's hotkeys stay out of the inputs, and the player around the window gets no click made in it
     root.addEventListener('keydown', (e) => {
-      e.stopPropagation(); // keep site hotkeys out of the inputs
       if (e.key === 'Escape') this.close();
     });
-    document.body.append(root);
+    overPage(root);
     void show(tab);
   }
 
@@ -157,6 +157,7 @@ export class SettingsWindow {
       api: this.host.api,
       openTab: (url: string) => this.host.openTab(url),
       wait: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)),
+      now: () => Date.now(),
     };
     try {
       const got = await signIn(site, deviceName(navigator.userAgent), (code) =>

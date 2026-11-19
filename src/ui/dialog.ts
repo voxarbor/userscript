@@ -1,5 +1,5 @@
 // A question over the page: a small window in the middle that keeps keys and clicks away from the player.
-import { type Child, el } from './dom';
+import { type Child, el, overPage, shield } from './dom';
 import { PANEL_CSS } from './styles';
 
 /** Puts a dialog with these children on the page. onEscape(): Escape was pressed in it. */
@@ -7,13 +7,11 @@ export function openDialog(kids: Child[], onEscape: () => void): HTMLElement {
   const dialog = el('div', { role: 'dialog' }, ...kids);
   dialog.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);' + PANEL_CSS +
     ';width:min(380px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:18px 20px';
-  for (const ev of ['keyup', 'keypress', 'click', 'dblclick', 'mousedown', 'mouseup', 'pointerdown', 'pointerup',
-    'touchstart', 'touchend', 'wheel']) dialog.addEventListener(ev, (e) => e.stopPropagation());
+  shield(dialog);
   dialog.addEventListener('keydown', (e) => {
-    e.stopPropagation();
     if (e.key === 'Escape') onEscape();
   });
-  document.body.append(dialog);
+  overPage(dialog);
   return dialog;
 }
 

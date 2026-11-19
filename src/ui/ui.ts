@@ -12,7 +12,9 @@ export class Ui {
   private made: { main: HTMLButtonElement; tune: HTMLButtonElement } | null = null;
   private readonly quick: QuickPanel;
   private readonly settings: SettingsWindow;
-  private voicesReq: Promise<Voice[]> | null = null; // all voices change rarely: one request per page, retried after a failure
+  // All voices change rarely: one request per connection (they are the server's answer to that token: another
+  // account may have other voices), retried after a failure.
+  private voicesReq: { token: string; list: Promise<Voice[]> } | null = null;
 
   constructor(private readonly host: UiHost) {
     const voices = (): Promise<Voice[]> => this.voices();
@@ -61,11 +63,15 @@ export class Ui {
     this.quick.close();
   }
 
-  /** Every voice of the server, asked for once per page. */
+  /** Every voice of the server, asked for once for the connection the script has now. */
   voices(): Promise<Voice[]> {
-    return this.voicesReq || (this.voicesReq = this.host.api.voices().catch((e) => {
-      this.voicesReq = null;
-      throw e;
-    }));
+    const { token } = this.host.store.current;
+    if (this.voicesReq && this.voicesReq.token === token) return this.voicesReq.list;
+    const asked = { token, list: this.host.api.voices() };
+    asked.list.catch(() => {
+      if (this.voicesReq === asked) this.voicesReq = null;
+    });
+    this.voicesReq = asked;
+    return asked.list;
   }
 }

@@ -41,7 +41,10 @@ export async function autoLink(box: LinkBox, host: LinkHost): Promise<void> {
   if (!code || !login) return;
   const { settings } = host;
   const theirs = settings.account.split(' · ')[0];
-  const take = async (): Promise<void> => {
+  // The code is good for one token, so it is traded once: a second press (a double click) is that same trade.
+  // Asked twice, the server refused the second, and the page said «failed» over a script just connected.
+  let trade: Promise<void> | null = null;
+  const attempt = async (): Promise<void> => {
     try {
       const got = await host.api.deviceToken({ device_code: code });
       Object.assign(settings, { token: got.token, account: `${got.login} · ${got.name}` });
@@ -53,6 +56,7 @@ export async function autoLink(box: LinkBox, host: LinkHost): Promise<void> {
       box.dataset.state = 'failed';
     }
   };
+  const take = (): Promise<void> => (trade ??= attempt());
   if (settings.token && theirs === login) {
     box.dataset.state = 'connected';
   } else if (settings.token) {

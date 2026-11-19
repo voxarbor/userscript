@@ -9,7 +9,7 @@ export interface UiHost {
    *  frame) and then save it. */
   readonly store: Readonly<Pick<SettingsStore, 'current' | 'save' | 'saveSoon'>>;
   readonly api: Pick<ServerApi, 'voices' | 'videoVoices' | 'speakers' | 'speakerVoice' | 'bytes' | 'deviceCode' | 'deviceToken'>;
-  readonly site: Pick<SiteAdapter, 'getVideo' | 'getPlayer'>;
+  readonly site: Pick<SiteAdapter, 'getVideo' | 'getPlayer' | 'panelAtTop'>;
   /** The server's key of the video being voiced; null while the voice-over is off or the server has not
    *  opened the video yet. */
   videoKey(): string | null;

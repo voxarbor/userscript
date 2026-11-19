@@ -18,6 +18,9 @@ export interface SiteAdapter {
   mountControls(buttons: HTMLElement[]): () => void;
   /** A better place for the buttons has appeared (asked every second). */
   wantsRemount?(): boolean;
+  /** The quick settings open under the buttons, at the player's top: the site has things of its own over the
+   *  player's bottom, where they open else. */
+  panelAtTop?(): boolean;
   /** The page went to another video without a load. -> the function that stops telling the listener */
   onNavigate(listener: () => void): () => void;
 }

@@ -1,6 +1,6 @@
 // Quick settings over the player. Built without innerHTML (Trusted Types).
 import type { SiteAdapter } from '../adapters/types';
-import { el } from './dom';
+import { el, overPage, shield } from './dom';
 import { PANEL_CSS } from './styles';
 
 export class QuickPanel {
@@ -9,7 +9,7 @@ export class QuickPanel {
   /** controls(): the panel's content, built at every opening. opener(): the button that opens the panel, so a
    *  press on it does not count as a press outside. */
   constructor(
-    private readonly site: Pick<SiteAdapter, 'getPlayer'>,
+    private readonly site: Pick<SiteAdapter, 'getPlayer' | 'panelAtTop'>,
     private readonly controls: () => HTMLElement[],
     private readonly opener: () => HTMLElement,
   ) {}
@@ -31,13 +31,16 @@ export class QuickPanel {
     // a phone's portrait player is too low: a sheet at the bottom instead, 12 px from both edges of what is seen
     // (not a width in vw: that counts a scrollbar in)
     if (player && player.clientHeight < 320) player = null;
-    panel.style.cssText = (player ? 'position:absolute;bottom:64px;right:12px;width:min(340px,calc(100% - 24px));max-height:calc(100% - 76px);'
+    // in the player: over its bottom bar, or (the site says so) under the buttons at its top, clear of what the
+    // site keeps over the player's bottom
+    const inPlayer = this.site.panelAtTop && this.site.panelAtTop() ? 'top:72px;right:12px;width:min(340px,calc(100% - 24px));max-height:calc(100% - 184px);'
+      : 'bottom:64px;right:12px;width:min(340px,calc(100% - 24px));max-height:calc(100% - 76px);';
+    panel.style.cssText = (player ? 'position:absolute;' + inPlayer
       : 'position:fixed;bottom:12px;left:12px;right:12px;max-width:420px;margin-left:auto;max-height:70vh;') +
       PANEL_CSS + ';padding:12px 14px;overflow:auto';
-    // Keep keys (space, arrows) and clicks inside the panel away from the player.
-    for (const ev of ['keydown', 'keyup', 'keypress', 'click', 'dblclick', 'mousedown', 'mouseup', 'pointerdown',
-      'pointerup', 'touchstart', 'touchend', 'wheel']) panel.addEventListener(ev, (e) => e.stopPropagation());
-    (player || document.body).append(panel);
+    shield(panel);
+    if (player) player.append(panel);
+    else overPage(panel);
     document.addEventListener('pointerdown', this.outside, true);
     document.addEventListener('keydown', this.esc, true);
   }

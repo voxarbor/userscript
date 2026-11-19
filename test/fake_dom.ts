@@ -56,6 +56,10 @@ export class FakeElement {
     return this.childNodes.filter((n): n is FakeElement => n instanceof FakeElement);
   }
 
+  get parentElement(): FakeElement | null {
+    return this.parentNode;
+  }
+
   get firstChild(): FakeNode | null {
     return this.childNodes[0] ?? null;
   }
@@ -71,6 +75,20 @@ export class FakeElement {
       node.parentNode = this;
       this.childNodes.push(node);
     }
+  }
+
+  prepend(kid: FakeElement): void {
+    kid.remove();
+    kid.parentNode = this;
+    this.childNodes.unshift(kid);
+  }
+
+  /** Puts the element into this one's parent, right before it. */
+  before(kid: FakeElement): void {
+    kid.remove();
+    const siblings = this.parentNode!.childNodes;
+    kid.parentNode = this.parentNode;
+    siblings.splice(siblings.indexOf(this), 0, kid);
   }
 
   replaceChildren(...kids: (FakeNode | string)[]): void {
@@ -103,6 +121,11 @@ export class FakeElement {
 
   setAttribute(name: string, value: string): void {
     this.attributes[name] = value;
+  }
+
+  removeAttribute(name: string): void {
+    delete this.attributes[name];
+    if (name === 'style') for (const key of Object.keys(this.css)) delete this.css[key];
   }
 
   focus(): void {
@@ -144,6 +167,10 @@ export class FakeElement {
 class FakeDocument {
   readonly body: FakeElement = new FakeElement('body', this);
   activeElement: FakeElement | null = null;
+  /** The element shown full screen; a test sets it and fires 'fullscreenchange'. */
+  fullscreenElement: FakeElement | null = null;
+  /** What the page has for a selector (the adapters look their places up by selectors); a test fills it. */
+  readonly found: Record<string, FakeElement | null> = {};
   private readonly capturing = new Map<string, Listener[]>();
 
   createElement(tag: string): FakeElement {
@@ -161,6 +188,15 @@ class FakeDocument {
 
   removeEventListener(type: string, listener: Listener): void {
     this.capturing.set(type, (this.capturing.get(type) || []).filter((l) => l !== listener));
+  }
+
+  querySelector(selector: string): FakeElement | null {
+    return this.found[selector] ?? null;
+  }
+
+  /** Sends an event of the document's own (fullscreenchange). */
+  fire(type: string): void {
+    this.capture({ type, target: this.body, stopped: false, stopPropagation() {}, preventDefault() {} });
   }
 
   capture(event: FakeEvent): void {

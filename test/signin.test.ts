@@ -9,15 +9,18 @@ const CODE = { device_code: 'dev-secret', user_code: 'BCDF-GHJK', expires_in: 20
 const wait = (error: string) => new ApiError(400, 'HTTP 400', JSON.stringify({ error }));
 
 /** A server that answers the polls in turn (a token string, or an error); what was asked and waited is noted. */
-function host(answers: (string | ApiError)[]) {
+function host(answers: (string | ApiError)[], pollTakesMs = 0, expires_in = CODE.expires_in) {
   const asked: string[] = [];
   const waited: number[] = [];
   const opened: string[] = [];
+  let clock = 1_000_000; // ms: a wait moves it on, and so does a poll that takes its time
   const h: SignInHost = {
+    now: () => clock,
     api: {
-      deviceCode: async (body) => (asked.push('code ' + body.name), CODE),
+      deviceCode: async (body) => (asked.push('code ' + body.name), { ...CODE, expires_in }),
       deviceToken: async (body) => {
         asked.push('token ' + body.device_code);
+        clock += pollTakesMs;
         const next = answers.shift();
         if (next === undefined) throw new Error('asked once too often');
         if (next instanceof ApiError) throw next;
@@ -25,9 +28,12 @@ function host(answers: (string | ApiError)[]) {
       },
     },
     openTab: (url) => opened.push(url),
-    wait: async (ms) => void waited.push(ms),
+    wait: async (ms) => {
+      waited.push(ms);
+      clock += ms;
+    },
   };
-  return { h, asked, waited, opened };
+  return { h, asked, waited, opened, since: () => clock - 1_000_000 };
 }
 
 test('the script shows the code, opens the site on it and polls until the person lets it in', async () => {
@@ -41,7 +47,7 @@ test('the script shows the code, opens the site on it and polls until the person
 });
 
 test('asked to slow down, the script waits five seconds longer', async () => {
-  const { h, waited } = host([wait('slow_down'), wait('authorization_pending'), 'vxa_tok']);
+  const { h, waited } = host([wait('slow_down'), wait('authorization_pending'), 'vxa_tok'], 0, 600);
   assert.equal((await signIn(h, 'x', () => {})).token, 'vxa_tok');
   assert.deepEqual(waited, [5000, 10000, 10000]);
 });
@@ -61,6 +67,27 @@ test('a lost answer is polled again; a refusal, an expired code and a refused re
   assert.equal(await failed([new ApiError(429, 'HTTP 429')]), 'Не вдалося: HTTP 429');
   // the code's time runs out while nobody answers: 20 s, polls every 5 s
   assert.equal(await failed(Array(4).fill(wait('authorization_pending'))), 'Код застарів: натисніть «Увійти» ще раз');
+});
+
+test('the code\'s time is the clock\'s: polls that hang without a network do not stretch it', async () => {
+  // 20 s of a code, a poll every 5 s, and every poll is lost only after 4 s: counted in waits that was 4 polls and
+  // 36 s; by the clock the code is over at 20 s, after 2 polls and a last wait cut to what was left of it
+  const { h, asked, waited, since } = host(Array(4).fill(new ApiError(0, 'timeout')), 4000);
+  await assert.rejects(signIn(h, 'x', () => {}), /Код застарів/);
+  assert.deepEqual(asked.slice(1), ['token dev-secret', 'token dev-secret']);
+  assert.deepEqual(waited, [5000, 5000, 2000]);
+  assert.equal(since(), 20000);
+});
+
+test('a computer that slept through the code\'s time is told so at once, without one more poll', async () => {
+  const { h, asked } = host([]);
+  const wait = h.wait;
+  h.wait = async (ms) => {
+    await wait(ms);
+    await wait(3600_000); // the timer fired an hour late
+  };
+  await assert.rejects(signIn(h, 'x', () => {}), /Код застарів/);
+  assert.deepEqual(asked, ['code x']);
 });
 
 test('the device is named by its browser and system', () => {
