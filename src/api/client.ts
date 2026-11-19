@@ -47,15 +47,20 @@ export class ServerApi {
   /** This tab among the viewers of a video: two tabs at other places are two viewers of the server's queue. */
   private readonly tab = Math.random().toString(36).slice(2, 10);
 
-  /** send: how a request leaves the page (the script manager's cross-origin request). */
+  /** send: how a request leaves the page (the script manager's cross-origin request). trace: gets a line for
+   *  every request as it ends (the journal); now: the clock it is timed with (ms). */
   constructor(
     private readonly send: (request: HttpRequest) => void,
     private readonly access: () => Access,
+    private readonly trace: (line: string) => void = () => {},
+    private readonly now: () => number = Date.now,
   ) {}
 
-  /** Opens the video for this viewer (or changes its voice settings, or brings the page's data). */
+  /** Opens the video for this viewer (or changes its voice settings, or brings the page's data). With the place
+   *  the viewer is at (from), a server that knows of it answers with the phrases from there too (window): this
+   *  tab is then named, as in a poll. */
   video(body: VideoIn): Promise<VideoOut> {
-    return this.ask('POST', '/v1/videos', body, false);
+    return this.ask('POST', '/v1/videos', body.from == null ? body : { ...body, tab: this.tab }, false);
   }
 
   /** The phrases of the minute from `from` (seconds). paused: the viewer does not watch now, so the video gets
@@ -107,8 +112,14 @@ export class ServerApi {
   private ask<T>(method: string, path: string, body: object | undefined, binary: boolean): Promise<T> {
     const { server, token } = this.access();
     const url = /^https?:/.test(path) ? path : server.replace(/\/+$/, '') + path;
+    const began = this.now();
+    const told = (result: string, more = ''): void =>
+      this.trace(`${method} ${path.length > 160 ? path.slice(0, 160) + '…' : path} → ${result}, ${Math.round(this.now() - began)} ms${more}`);
     return new Promise<T>((resolve, reject) => {
-      const fail = (status: number, message: string, body = ''): void => reject(new ApiError(status, message, body));
+      const fail = (status: number, message: string, body = ''): void => {
+        told(message);
+        reject(new ApiError(status, message, body));
+      };
       const request: HttpRequest = {
         method,
         url,
@@ -116,12 +127,21 @@ export class ServerApi {
         timeout: TIMEOUT_MS,
         onload: (r) => {
           if (r.status < 200 || r.status >= 300) return fail(r.status, `HTTP ${r.status}`, r.responseText);
-          if (binary) return resolve(r.response as T);
-          try {
-            resolve(JSON.parse(r.responseText) as T);
-          } catch {
-            fail(0, 'bad JSON');
+          const own = /^server-timing:.*?\bdur=([\d.]+)/im.exec(r.responseHeaders || ''); // the server's own time
+          const size = binary ? (r.response as ArrayBuffer | null)?.byteLength : r.responseText.length;
+          const more = `${own ? ` (server ${own[1]} ms)` : ''}, ${size ?? 0} B`;
+          if (binary) {
+            told(String(r.status), more);
+            return resolve(r.response as T);
           }
+          let parsed: T;
+          try {
+            parsed = JSON.parse(r.responseText) as T;
+          } catch {
+            return fail(0, 'bad JSON');
+          }
+          told(String(r.status), more);
+          resolve(parsed);
         },
         onerror: () => fail(0, 'network error'),
         ontimeout: () => fail(0, 'timeout'),

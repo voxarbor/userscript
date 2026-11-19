@@ -4,8 +4,10 @@ import { adapterFor } from './adapters/registry';
 import type { SiteAdapter } from './adapters/types';
 import { ServerApi, type Voice } from './api/client';
 import { autoLink, onPanel, type LinkBox } from './core/autolink';
+import { Journal } from './core/journal';
 import { readyOffer } from './core/ready';
 import { VoiceoverSession } from './core/session';
+import { VERSION } from './meta';
 import { scriptManager } from './platform/gm';
 import { SERVER, SettingsStore } from './settings/store';
 import { toast } from './ui/dom';
@@ -20,12 +22,23 @@ const TAKEN_MAX = 300;
 const platform = scriptManager;
 const store = new SettingsStore(platform);
 
+// The diagnostic journal is always kept (in memory, for «Копіювати журнал»); ?vxdebug=1 in a page's address, or
+// the setting, also writes it to the console as it grows (?vxdebug=0 stops that).
+const journal = new Journal(Date.now, (line) => {
+  if (store.current.debug) console.debug('VoxArbor UA', line);
+});
+const asked = new URLSearchParams(location.search).get('vxdebug');
+if ((asked === '1' || asked === '0') && store.current.debug !== (asked === '1')) {
+  store.current.debug = asked === '1';
+  store.save();
+}
+
 // A slider's changes are written once they settle: write what still waits when the page goes away.
 window.addEventListener('pagehide', () => store.flush());
 
 function wire(adapter: SiteAdapter): void {
   const S = store.current; // one object for the page's life: the UI changes it in place
-  const server = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }));
+  const server = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }), (line) => journal.mark(line));
   let unmount: (() => void) | null = null; // takes the buttons out of the page
 
   // the voices once a page (the settings' list): a name to show for an id
@@ -40,6 +53,7 @@ function wire(adapter: SiteAdapter): void {
     toast,
     voiceName: async (id: string): Promise<string> => (await voiceList().catch(() => [])).find((v) => v.id === id)?.label || id,
     openSettings: () => ui.openSettings(),
+    note: (what) => journal.mark(what),
   });
 
   const ui = new Ui({
@@ -56,6 +70,14 @@ function wire(adapter: SiteAdapter): void {
       session.voicesChanged();
     },
     openTab: (url) => platform.openTab(url),
+    copy: (text) => platform.copy(text),
+    // what the owner is sent: the journal under what it was written by (never the token)
+    journal: () => journal.text([
+      `VoxArbor UA ${VERSION} · ${new Date().toISOString()}`,
+      navigator.userAgent,
+      `server ${SERVER} · ${S.token ? 'connected' : 'not connected'} · page ${location.href}`,
+      `settings ${JSON.stringify({ ...S, token: undefined, account: undefined })}`,
+    ]),
     onConnectionChanged() {
       if (session.on) {
         session.stop();
@@ -69,6 +91,7 @@ function wire(adapter: SiteAdapter): void {
   function startChecked(): void {
     if (dubQuestion.asked || readyQuestion.asked) return;
     const url = adapter.getVideoUrl();
+    journal.begin(`click: the voice-over on, ${url ?? 'no video here'}`);
     const ok = platform.getValue<string[]>('ukDubOk', []);
     let dub = false;
     try {
@@ -98,12 +121,16 @@ function wire(adapter: SiteAdapter): void {
     const before = kept(url);
     looking = true;
     ui.setState('busy', 'Запуск озвучки…');
+    // the video is opened on the server at once, while the server is asked what is ready (owner: one request after
+    // the other made the start slow); the voice-over that starts below takes that answer
+    session.prepare(before || null);
     const offer = await readyOffer({ voiced: (u) => server.voiced(u), voices: () => ui.voices() }, url, S, before);
     looking = false;
     if (session.on) return;
     ui.setState('idle');
     if (adapter.getVideoUrl() !== url) return; // the viewer went on meanwhile
     if (!offer.ready.length) return session.start(before || null);
+    journal.mark(`ready in other voices (${offer.ready.map((v) => v.voice).join(', ')}): the viewer is asked`);
     readyQuestion.ask(offer, (voice) => {
       if (adapter.getVideoUrl() !== url) return;
       take(url, voice);
@@ -113,6 +140,7 @@ function wire(adapter: SiteAdapter): void {
 
   // SPA navigation (called by the adapter; watch() also stops a session whose video changed): drop all state.
   function onNavigate(): void {
+    journal.mark(`navigation: ${location.href}`);
     session.stop();
     dubQuestion.drop(); // the questions were about the previous video
     readyQuestion.drop();

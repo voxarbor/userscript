@@ -1,6 +1,45 @@
 {
  "components": {
   "schemas": {
+   "CaptionTrackIn": {
+    "description": "A caption track the page lists (the player's captionTracks), whether or not its text was taken.",
+    "properties": {
+     "kind": {
+      "anyOf": [
+       {
+        "maxLength": 20,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kind"
+     },
+     "lang": {
+      "maxLength": 40,
+      "title": "Lang",
+      "type": "string"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "maxLength": 200,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     }
+    },
+    "required": [
+     "lang"
+    ],
+    "title": "CaptionTrackIn",
+    "type": "object"
+   },
    "DeviceCodeOut": {
     "properties": {
      "device_code": {
@@ -220,6 +259,21 @@
    "PageIn": {
     "description": "What the userscript saw on the YouTube page; captions in it spare the coordinator any YouTube request.",
     "properties": {
+     "caption_tracks": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/CaptionTrackIn"
+        },
+        "maxItems": 300,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Caption Tracks"
+     },
      "channel": {
       "anyOf": [
        {
@@ -309,6 +363,21 @@
       ],
       "title": "Title"
      },
+     "tracks": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/PageTrackIn"
+        },
+        "maxItems": 4,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tracks"
+     },
      "video_id": {
       "anyOf": [
        {
@@ -323,6 +392,48 @@
      }
     },
     "title": "PageIn",
+    "type": "object"
+   },
+   "PageTrackIn": {
+    "description": "One more caption track of the page, besides the one in PageIn.subs/json3 (the script 0.10+ sends the\nspeech's own tracks and YouTube's automatic English one).",
+    "properties": {
+     "json3": {
+      "additionalProperties": true,
+      "title": "Json3",
+      "type": "object"
+     },
+     "kind": {
+      "enum": [
+       "manual",
+       "asr"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "lang": {
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$",
+      "title": "Lang",
+      "type": "string"
+     },
+     "translated_from": {
+      "anyOf": [
+       {
+        "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Translated From"
+     }
+    },
+    "required": [
+     "lang",
+     "kind",
+     "json3"
+    ],
+    "title": "PageTrackIn",
     "type": "object"
    },
    "SegmentOut": {
@@ -730,6 +841,18 @@
    },
    "VideoIn": {
     "properties": {
+     "from": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "From"
+     },
      "lead_female": {
       "anyOf": [
        {
@@ -783,6 +906,17 @@
       "title": "Page Support",
       "type": "boolean"
      },
+     "paused": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Paused"
+     },
      "switch": {
       "anyOf": [
        {
@@ -793,6 +927,18 @@
        }
       ],
       "title": "Switch"
+     },
+     "tab": {
+      "anyOf": [
+       {
+        "maxLength": 40,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tab"
      },
      "url": {
       "title": "Url",
@@ -891,6 +1037,16 @@
        }
       ],
       "title": "Voice"
+     },
+     "window": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SegmentsOut"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "required": [

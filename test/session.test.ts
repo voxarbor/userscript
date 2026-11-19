@@ -14,7 +14,7 @@ afterEach(() => {
 
 const VIDEO_A = 'https://www.youtube.com/watch?v=aaaaaaaaaaa';
 const VIDEO_B = 'https://www.youtube.com/watch?v=bbbbbbbbbbb';
-const OPEN_A = `POST {"url":"${VIDEO_A}","voice":"Speaker_53","lead_male":"","lead_female":"","page_support":true,"switch":false}`;
+const OPEN_A = `POST {"url":"${VIDEO_A}","voice":"Speaker_53","lead_male":"","lead_female":"","page_support":true,"switch":false,"from":0}`;
 
 /** A video element as far as the session uses it. As in a browser, play() and pause() act at once and their
  *  events come after the code that called them. */
@@ -72,6 +72,10 @@ function page(over: Partial<Settings> = {}) {
     clips: {} as Record<string, number>,
     /** The voice the video is voiced in for everybody; null: as the viewer asked. */
     voice: null as string | null,
+    /** The opening is answered with the phrases too (a server of 0.10 on); false: one from before. */
+    windows: false,
+    /** The openings are answered only by deliverOpen(). */
+    slowOpen: false,
   };
   const site = { url: VIDEO_A as string | null, video: video as FakeVideo | null, ad: false, page: null as PageData | null };
   /** The requests made, and what the session told the user, both in order. */
@@ -81,6 +85,11 @@ function page(over: Partial<Settings> = {}) {
   const offers: ToastAction[] = [];
   const undelivered: (() => void)[] = [];
   const heldWindows: (() => void)[] = [];
+  const heldOpens: (() => void)[] = [];
+  /** The journal's lines. */
+  const notes: string[] = [];
+  const window = () => ({ status: server.status, progress: server.progress, error: server.error, refused: server.refused,
+    voiced_until: server.voicedUntil, page_needed: server.pageNeeded, segments: server.phrases, voice: server.voice });
 
   const host: SessionHost = {
     settings,
@@ -89,14 +98,15 @@ function page(over: Partial<Settings> = {}) {
         asked.push('POST ' + JSON.stringify(body));
         if (server.down) throw server.down;
         if (body.switch || !server.voice) server.voice = body.voice ?? null;
+        if (server.slowOpen) await new Promise<void>((go) => heldOpens.push(go));
         return { video_key: 'k1', status: server.status, error: server.error, page_needed: server.pageNeeded,
-          duration: null, source_lang: null, refused: server.refused, voice: server.voice };
+          duration: null, source_lang: null, refused: server.refused, voice: server.voice,
+          ...(server.windows && body.from != null ? { window: window() } : {}) };
       },
       async segments(key, from, paused) {
         asked.push(`GET ${key} from ${from}${paused ? ' paused' : ''}`);
         if (server.down) throw server.down;
-        const answer = { status: server.status, progress: server.progress, error: server.error, refused: server.refused,
-          voiced_until: server.voicedUntil, page_needed: server.pageNeeded, segments: server.phrases, voice: server.voice };
+        const answer = window();
         if (server.holdWindows) await new Promise<void>((go) => heldWindows.push(go));
         return answer;
       },
@@ -123,6 +133,7 @@ function page(over: Partial<Settings> = {}) {
     },
     voiceName: async (id) => 'name of ' + id,
     openSettings: () => told.push('settings'),
+    note: (what) => notes.push(what),
   };
 
   /** Lets time pass: the timers due in it fire, and what waited for an answer or an event goes on. */
@@ -144,11 +155,16 @@ function page(over: Partial<Settings> = {}) {
     heldWindows.shift()!();
     await pass(0);
   };
+  /** A server that holds its openings answers the oldest one. */
+  const deliverOpen = async (): Promise<void> => {
+    heldOpens.shift()!();
+    await pass(0);
+  };
   /** The audio context the session made, and what was started through it. */
   const audio = () => contexts[0]!;
   const sounds = () => audio().sources;
 
-  return { session: new VoiceoverSession(host), video, settings, server, site, asked, told, offers, contexts, pass, frame, deliver, deliverWindow, audio, sounds };
+  return { session: new VoiceoverSession(host), video, settings, server, site, asked, told, offers, contexts, notes, pass, frame, deliver, deliverWindow, deliverOpen, audio, sounds };
 }
 
 test('switching on opens the video on the server and asks for its phrases, then asks as often as its state needs', async () => {
@@ -196,7 +212,7 @@ test('the audio of a window is downloaded three phrases at a time, the nearest f
   await p.pass(0);
   assert.deepEqual(p.asked.slice(2), audioOf(1, 2, 3));
   await p.deliver();
-  assert.deepEqual(p.asked.slice(5), audioOf(4)); // one is in: the next one starts
+  assert.deepEqual(p.asked.filter((a) => a.startsWith('audio')).slice(3), audioOf(4)); // one is in: the next one starts
   await p.deliver();
   await p.deliver();
   await p.deliver();
@@ -213,7 +229,7 @@ test('audio that failed to download is tried again after five seconds', async ()
   assert.deepEqual(p.asked.slice(2), audioOf(0, 1));
   await p.pass(4999);
   assert.deepEqual(p.asked.filter((a) => a.startsWith('audio')), audioOf(0, 1));
-  await p.pass(1);
+  await p.pass(1001); // at the poll after the five seconds
   assert.deepEqual(p.asked.filter((a) => a.startsWith('audio')), audioOf(0, 1, 1));
 });
 
@@ -401,7 +417,7 @@ test('another voice or speakers\' mode goes to the server in a new POST and the 
   p.session.voicesChanged();
   await p.pass(0);
   assert.deepEqual(p.asked, [
-    `POST {"url":"${VIDEO_A}","voice":"anna","mode":"two","lead_male":"","lead_female":"anna","page_support":true,"switch":true}`,
+    `POST {"url":"${VIDEO_A}","voice":"anna","mode":"two","lead_male":"","lead_female":"anna","page_support":true,"switch":true,"from":0}`,
     'GET k1 from 0', ...audioOf(0)]);
 
   p.asked.length = 0;
@@ -414,7 +430,7 @@ test('a voice taken for this video alone voices it by itself; a choice in the se
   const p = page({ voice: 'taras', mode: 'two', leadFemale: 'olena' });
   p.session.start('anna');
   await p.pass(0);
-  const alone = `POST {"url":"${VIDEO_A}","voice":"anna","mode":"one","lead_male":"","lead_female":"","page_support":true,"switch":true}`;
+  const alone = `POST {"url":"${VIDEO_A}","voice":"anna","mode":"one","lead_male":"","lead_female":"","page_support":true,"switch":true,"from":0}`;
   assert.deepEqual(p.asked, [alone, 'GET k1 from 0']);
 
   p.session.stop();
@@ -425,7 +441,7 @@ test('a voice taken for this video alone voices it by itself; a choice in the se
   p.session.stop();
   p.session.start(); // and not for the voices of the settings
   await p.pass(0);
-  const own = `POST {"url":"${VIDEO_A}","voice":"taras","mode":"two","lead_male":"","lead_female":"olena","page_support":true,"switch":false}`;
+  const own = `POST {"url":"${VIDEO_A}","voice":"taras","mode":"two","lead_male":"","lead_female":"olena","page_support":true,"switch":false,"from":0}`;
   assert.deepEqual(p.asked.slice(1), [own, 'GET k1 from 0']);
 
   p.session.stop();
@@ -466,8 +482,8 @@ test('a change of voices silences at once what the voice before has started or s
 });
 
 test('a phrase whose audio arrives a little after its start is still heard, from where the video is', async () => {
-  const p = page();
-  p.server.slow = true;
+  const p = page({ waitForVoice: false });
+  Object.assign(p.server, { slow: true, status: 'voicing' }); // not ready: the video is not held back for its audio
   p.server.phrases = [phrase(0, 0, 3)];
   p.session.start();
   await p.pass(0);
@@ -529,7 +545,7 @@ test('switching off keeps what was prepared for a minute: on again for the same 
   await p.pass(60_000); // kept no longer than a minute
   p.session.start();
   await p.pass(0);
-  assert.deepEqual(p.asked, [OPEN_A, 'GET k1 from 1', ...audioOf(0)]);
+  assert.deepEqual(p.asked, [OPEN_A.replace('"from":0', '"from":1'), 'GET k1 from 1', ...audioOf(0)]);
 
   p.session.stop();
   p.asked.length = 0;
@@ -562,7 +578,7 @@ test('the page going to another video is noticed, and switching off stops everyt
 
   p.session.start(); // what was kept is of the other video
   await p.pass(0);
-  assert.equal(p.asked[0], OPEN_A.replace(VIDEO_A, VIDEO_B));
+  assert.equal(p.asked[0], OPEN_A.replace(VIDEO_A, VIDEO_B).replace('"from":0', '"from":1'));
 });
 
 test('a video element taken out of the page is a lost video too', async () => {
@@ -709,10 +725,11 @@ test('a server that does not answer: said so, asked again every ten seconds, and
   assert.equal(p.asked.length, 0);
   p.server.down = new ApiError(503, 'HTTP 503');
   await p.pass(1000);
-  assert.deepEqual([p.asked, p.told.at(-1)], [[OPEN_A], 'offline: Сервер озвучки недоступний, повторю за 10 с']);
+  const again = OPEN_A.replace('"from":0', '"from":3'); // the video went on meanwhile
+  assert.deepEqual([p.asked, p.told.at(-1)], [[again], 'offline: Сервер озвучки недоступний, повторю за 10 с']);
   Object.assign(p.server, { down: null, status: 'ready' });
   await p.pass(10_000);
-  assert.deepEqual([p.asked.slice(1), p.told.at(-1)], [[OPEN_A, 'GET k1 from 3'], 'on: 100%']);
+  assert.deepEqual([p.asked.slice(1), p.told.at(-1)], [[again, 'GET k1 from 3'], 'on: 100%']);
 });
 
 test('page data the server asks for is collected and posted once per switching on, if it has subtitles', async () => {
@@ -758,4 +775,336 @@ test('a video voiced in another voice is heard as it is, and the person is offer
   await p.pass(0);
   assert.equal(p.asked[0], OPEN_A.replace('"switch":false', '"switch":true'));
   assert.equal(p.server.voice, 'Speaker_53');
+});
+
+// ---------- the start of a ready video (0.10): phrases with the opening, joined in their middle, a short wait ----------
+
+test('a server that answers the opening with the phrases is not asked for them again', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, phrases: [phrase(0, 5, 8), phrase(1, 70, 72)] });
+  p.session.start();
+  await p.pass(0);
+  assert.deepEqual(p.asked, [OPEN_A, ...audioOf(0, 1)]);
+  assert.deepEqual([p.session.key, p.told.at(-1)], ['k1', 'on: 100%']);
+  await p.pass(59_000); // ready, the minute that came with the opening reaches far ahead
+  assert.deepEqual(p.asked.filter((a) => !a.startsWith('audio')), [OPEN_A]);
+  await p.pass(2000); // the server hears of the viewer once a minute, as before
+  assert.deepEqual(p.asked.slice(3), ['GET k1 from 0']);
+
+  const voicing = page({ waitForVoice: false });
+  Object.assign(voicing.server, { windows: true, status: 'voicing', progress: 0.5 });
+  voicing.session.start();
+  await voicing.pass(0);
+  assert.deepEqual([voicing.asked, voicing.told.at(-1)], [[OPEN_A], 'busy: 50%']);
+  await voicing.pass(3001); // not ready: asked every three seconds from then on
+  assert.deepEqual(voicing.asked.slice(1), ['GET k1 from 0']);
+});
+
+test('a ready video switched on in the middle of a phrase: the phrase is heard from where the video is', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, phrases: [phrase(0, 10, 16), phrase(1, 16, 19)], clips: { '/v1/audio/0.opus': 6 } });
+  p.video.currentTime = 12;
+  p.session.start();
+  await p.pass(0); // the phrases came with the opening, the audio right after
+  assert.equal(p.sounds().length, 1);
+  assert.deepEqual(p.sounds()[0]!.started, { when: 0, offset: 2 });
+  assert.ok(p.notes.some((n) => n.startsWith('phrase 0 [10.00–16.00] sounds from 2.00 s into its 6.00 s')), p.notes.join('\n'));
+  p.audio().currentTime = 50;
+  await p.frame(12.5);
+  assert.equal(p.sounds().length, 1);
+  await p.frame(15.875); // the next one starts at its time, the joined one is not started again
+  assert.deepEqual([p.sounds().length, p.sounds()[1]!.started], [2, { when: 50.125, offset: 0 }]);
+});
+
+test('a phrase with under 0.7 s left to hear is not joined: the next one is waited for', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, phrases: [phrase(0, 10, 13), phrase(1, 13, 16)], clips: { '/v1/audio/0.opus': 3 } });
+  p.video.currentTime = 12.5;
+  p.session.start();
+  await p.pass(0);
+  await p.frame(12.5);
+  assert.equal(p.sounds().length, 0);
+  await p.frame(13);
+  assert.deepEqual(p.sounds().map((x) => x.started!.offset), [0]);
+});
+
+test('a ready video is held back at the switching on until the audio of the phrase at its place is here', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, slow: true, phrases: [phrase(0, 10, 16), phrase(1, 16, 19)], clips: { '/v1/audio/0.opus': 6 } });
+  p.video.currentTime = 12;
+  p.session.start();
+  await p.pass(0);
+  assert.deepEqual([p.video.paused, p.told.at(-1), p.audio().state], [true, 'busy: Готуємо озвучку…', 'suspended']);
+  await p.pass(400);
+  assert.equal(p.video.paused, true);
+  await p.deliver(); // the audio of the phrase at the video's place
+  assert.deepEqual([p.video.paused, p.told.at(-1), p.audio().state], [false, 'on: 100%', 'running']);
+  assert.deepEqual(p.sounds().map((x) => x.started!.offset), [2]); // and it sounds at once, from where the video stands
+  assert.ok(!p.asked.some((a) => a.includes('paused'))); // the viewer waits to watch: the server is not told «paused»
+  await p.pass(5000);
+  assert.equal(p.video.paused, false); // once a switching on
+});
+
+test('the wait for the first audio ends after a second and a half whatever has come; the phrase is joined later', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, slow: true, phrases: [phrase(0, 10, 16)], clips: { '/v1/audio/0.opus': 6 } });
+  p.video.currentTime = 12;
+  p.session.start();
+  await p.pass(0);
+  await p.pass(1499);
+  assert.equal(p.video.paused, true);
+  await p.pass(1);
+  assert.deepEqual([p.video.paused, p.told.at(-1)], [false, 'on: 100%']);
+  assert.ok(p.notes.includes('prep: the video goes on after 1500 ms: the time is up'), p.notes.join('\n'));
+  await p.frame(13);
+  assert.equal(p.sounds().length, 0);
+  await p.deliver(); // late
+  await p.frame(13.5);
+  assert.deepEqual(p.sounds().map((x) => x.started!.offset), [3.5]);
+});
+
+test('audio that cannot be had ends the wait at once', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, phrases: [phrase(0, 10, 16)], lost: ['/v1/audio/0.opus'] });
+  p.video.currentTime = 12;
+  p.session.start();
+  await p.pass(0);
+  assert.equal(p.video.paused, false);
+  assert.ok(p.notes.some((n) => n.endsWith('its audio is not coming')), p.notes.join('\n'));
+});
+
+test('the video is not held back when nothing is to be waited for: no phrase near, a video not ready, an ad', async () => {
+  const far = page();
+  Object.assign(far.server, { windows: true, slow: true, phrases: [phrase(0, 14, 16)] });
+  far.video.currentTime = 12; // the first phrase is two seconds ahead: its audio comes in time
+  far.session.start();
+  await far.pass(0);
+  assert.deepEqual([far.video.paused, far.told.at(-1)], [false, 'on: 100%']);
+
+  const voicing = page({ waitForVoice: false });
+  Object.assign(voicing.server, { windows: true, slow: true, status: 'voicing', phrases: [phrase(0, 10, 16)] });
+  voicing.video.currentTime = 12;
+  voicing.session.start();
+  await voicing.pass(0);
+  assert.equal(voicing.video.paused, false);
+
+  const ad = page();
+  Object.assign(ad.server, { windows: true, slow: true, phrases: [phrase(0, 10, 16)] });
+  ad.video.currentTime = 12;
+  ad.site.ad = true;
+  ad.session.start();
+  await ad.pass(0);
+  assert.equal(ad.video.paused, false);
+});
+
+test('switched on over a paused ready video: it starts when the first audio is here, not before', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, slow: true, phrases: [phrase(0, 0, 4)] });
+  p.video.paused = true;
+  p.session.start();
+  await p.pass(0);
+  assert.deepEqual([p.video.paused, p.told.at(-1)], [true, 'busy: Готуємо озвучку…']);
+  await p.deliver();
+  assert.equal(p.video.paused, false);
+  assert.deepEqual(p.sounds().map((x) => x.started!.offset), [0]);
+});
+
+test('switching off while the video waits for the voice-over lets it go on; one the viewer had paused stays paused', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, slow: true, phrases: [phrase(0, 0, 4)] });
+  p.session.start();
+  await p.pass(0);
+  assert.equal(p.video.paused, true); // held back by us
+  p.session.stop();
+  assert.equal(p.video.paused, false);
+  await p.pass(2000); // the wait's timer is gone with the run
+  assert.equal(p.told.at(-1), 'idle');
+
+  const own = page();
+  Object.assign(own.server, { windows: true, slow: true, phrases: [phrase(0, 0, 4)] });
+  own.video.paused = true;
+  own.session.start();
+  await own.pass(0);
+  own.session.stop();
+  assert.equal(own.video.paused, true);
+
+  const gone = page(); // the page went to another video: its player is not ours to start
+  Object.assign(gone.server, { windows: true, slow: true, phrases: [phrase(0, 0, 4)] });
+  gone.session.start();
+  await gone.pass(0);
+  gone.site.url = VIDEO_B;
+  gone.session.stop();
+  assert.equal(gone.video.paused, true);
+});
+
+test('the video opened ahead of the switching on is not opened again; another voice or place asks anew', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, slowOpen: true, phrases: [phrase(0, 5, 8)] });
+  p.session.prepare();
+  assert.deepEqual([p.asked, p.session.on, p.contexts.length], [[OPEN_A], false, 0]); // asked at once; nothing is on yet
+  p.session.start();
+  await p.pass(0);
+  assert.equal(p.asked.length, 1);
+  await p.deliverOpen();
+  assert.deepEqual([p.asked, p.session.key], [[OPEN_A, ...audioOf(0)], 'k1']);
+
+  const other = page();
+  other.server.windows = true;
+  other.session.prepare();
+  other.session.start('anna'); // the viewer took a ready voice in the question: that is another opening
+  await other.pass(0);
+  assert.deepEqual(other.asked.map((a) => a.slice(a.indexOf('"voice"'), a.indexOf(',"lead_male"')) + a.slice(a.indexOf('"switch"'), a.indexOf(',"from"'))),
+    ['"voice":"Speaker_53""switch":false', '"voice":"anna","mode":"one""switch":true']);
+
+  const moved = page();
+  moved.server.windows = true;
+  moved.session.prepare();
+  moved.video.currentTime = 300; // the viewer went elsewhere in the video meanwhile
+  moved.session.start();
+  await moved.pass(0);
+  assert.deepEqual(moved.asked, [OPEN_A, OPEN_A.replace('"from":0', '"from":300')]);
+
+  const late = page();
+  late.server.windows = true;
+  late.session.prepare();
+  await late.pass(5000); // a question answered long after
+  late.session.start();
+  await late.pass(0);
+  assert.equal(late.asked.length, 2);
+
+  const failed = page();
+  failed.server.down = new ApiError(0, 'network error');
+  failed.session.prepare();
+  await failed.pass(0);
+  failed.session.start();
+  await failed.pass(0);
+  assert.deepEqual([failed.asked.length, failed.told.at(-1)], [1, 'offline: Сервер озвучки недоступний, повторю за 10 с']);
+  failed.server.down = null;
+  await failed.pass(10_000);
+  assert.deepEqual(failed.asked.length, 3); // opened anew, by itself (a server from before: with a GET)
+});
+
+test('switched off while the video is being opened: nothing more is asked or collected for it', async () => {
+  const p = page();
+  Object.assign(p.server, { slowOpen: true, pageNeeded: true });
+  let collected = 0;
+  p.site.page = null;
+  const host = p.session as unknown as { host: { site: { collectPage(): Promise<PageData | null> } } };
+  host.host.site.collectPage = async () => (collected++, null);
+  p.session.start();
+  await p.pass(0);
+  p.session.stop();
+  await p.deliverOpen();
+  await p.pass(5000);
+  assert.deepEqual([p.asked, collected], [[OPEN_A], 0]);
+});
+
+test('switching on while the voice-over is on stops the run before: one run, one set of listeners', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, phrases: [phrase(0, 5, 8)] });
+  p.session.start();
+  await p.pass(0);
+  p.session.start();
+  await p.pass(0);
+  p.audio().currentTime = 9;
+  await p.frame(5);
+  assert.equal(p.sounds().length, 1); // not once per run
+});
+
+test('a seek into the middle of a phrase: its audio is asked for at once and it is heard from there', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, phrases: [phrase(0, 1, 3), phrase(1, 100, 110)], clips: { '/v1/audio/1.opus': 10 } });
+  p.session.start();
+  await p.pass(0);
+  await p.frame(1);
+  // further on: the phrase there is known already (kept 120 s ahead) and its audio is here
+  p.server.holdWindows = true;
+  p.asked.length = 0;
+  p.video.currentTime = 104;
+  p.video.seeking = true;
+  p.video.fire('seeking');
+  await p.pass(0);
+  assert.deepEqual(p.asked, ['GET k1 from 104']); // its audio is here already; the window is asked for
+  p.video.seeking = false;
+  await p.frame(104.25);
+  assert.deepEqual(p.sounds().at(-1)!.started!.offset, 4.25); // joined before the window has even come
+
+  // a place whose phrase is known but its audio is not here: asked for with the seek, not after the window
+  const q = page();
+  Object.assign(q.server, { windows: true, slow: true, phrases: [phrase(0, 1, 3), phrase(1, 20, 30), phrase(2, 40, 50), phrase(3, 60, 70), phrase(4, 80, 90)] });
+  q.session.start();
+  await q.pass(0); // three at a time: 0, 1, 2 are on their way
+  q.server.holdWindows = true;
+  q.asked.length = 0;
+  q.video.currentTime = 85;
+  q.video.fire('seeking');
+  assert.equal(q.asked.length, 0); // three are on their way already
+  await q.deliver();
+  assert.deepEqual(q.asked.filter((a) => a.startsWith('audio')), audioOf(4)); // the one at the new place goes first
+});
+
+test('another voice chosen in the middle of a phrase: the phrase goes on in the new voice from where the video is', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, phrases: [phrase(0, 10, 20)], clips: { '/v1/audio/0.opus': 10 } });
+  p.video.currentTime = 10;
+  p.session.start();
+  await p.pass(0);
+  await p.frame(10);
+  assert.equal(p.sounds().length, 1);
+  p.settings.voice = 'anna';
+  p.session.voicesChanged();
+  assert.equal(p.sounds()[0]!.stopped, 'now');
+  await p.pass(0); // opened anew with the new voice: its phrases and their audio come
+  assert.equal(p.video.paused, false); // no holding back in the middle of the watching
+  await p.frame(13);
+  assert.deepEqual([p.sounds().length, p.sounds()[1]!.started!.offset], [2, 3]);
+});
+
+test('a video that stalls keeps what sounds waiting with it', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, phrases: [phrase(0, 1, 9)] });
+  p.session.start();
+  await p.pass(0);
+  await p.frame(1);
+  p.video.fire('waiting'); // it buffers: not paused, but the picture stands
+  await p.pass(0);
+  assert.equal(p.audio().state, 'suspended');
+  p.video.fire('playing');
+  await p.pass(0);
+  assert.equal(p.audio().state, 'running');
+
+  p.video.fire('waiting');
+  await p.pass(0);
+  Object.assign(p.video, { readyState: 4 });
+  p.video.fire('timeupdate'); // the time moves again though «playing» never came
+  await p.pass(0);
+  assert.equal(p.audio().state, 'running');
+
+  p.video.fire('waiting');
+  p.video.pause(); // paused while it stalled: «playing» alone does not start the sound
+  await p.pass(0);
+  p.video.fire('playing');
+  await p.pass(0);
+  assert.equal(p.audio().state, 'suspended');
+});
+
+test('the journal tells the steps of a switching on', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, slow: true, phrases: [phrase(0, 10, 16)], clips: { '/v1/audio/0.opus': 6 } });
+  p.video.currentTime = 12;
+  p.session.start();
+  await p.pass(0);
+  await p.pass(250);
+  await p.deliver();
+  assert.deepEqual(p.notes, [
+    `on: ${VIDEO_A} at 12.00, playing, voices Speaker_53|||`,
+    'opened: ready, voice Speaker_53',
+    'phrases from 12.00: ready, 1 known, 1 voiced, voiced until 0; at the video\'s place: phrase 0 [10.00–16.00]',
+    'prep: the video waits for the audio of phrase 0 (it starts at 10.00, the video is at 12.00)',
+    'video: pause at 12.00',
+    'phrase 0 [10.00–16.00]: 6.00 s of audio here 250 ms after it was asked for',
+    'prep: the video goes on after 250 ms: its audio is here',
+    'phrase 0 [10.00–16.00] sounds from 2.00 s into its 6.00 s, the video is at 12.00',
+    'video: play at 12.00',
+  ]);
 });

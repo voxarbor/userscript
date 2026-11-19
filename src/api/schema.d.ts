@@ -215,6 +215,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * CaptionTrackIn
+         * @description A caption track the page lists (the player's captionTracks), whether or not its text was taken.
+         */
+        CaptionTrackIn: {
+            /** Kind */
+            kind?: string | null;
+            /** Lang */
+            lang: string;
+            /** Name */
+            name?: string | null;
+        };
         /** DeviceCodeOut */
         DeviceCodeOut: {
             /** Device Code */
@@ -299,6 +311,8 @@ export interface components {
          * @description What the userscript saw on the YouTube page; captions in it spare the coordinator any YouTube request.
          */
         PageIn: {
+            /** Caption Tracks */
+            caption_tracks?: components["schemas"]["CaptionTrackIn"][] | null;
             /** Channel */
             channel?: string | null;
             /** Duration */
@@ -315,8 +329,30 @@ export interface components {
             subs_lang?: string | null;
             /** Title */
             title?: string | null;
+            /** Tracks */
+            tracks?: components["schemas"]["PageTrackIn"][] | null;
             /** Video Id */
             video_id?: string | null;
+        };
+        /**
+         * PageTrackIn
+         * @description One more caption track of the page, besides the one in PageIn.subs/json3 (the script 0.10+ sends the
+         *     speech's own tracks and YouTube's automatic English one).
+         */
+        PageTrackIn: {
+            /** Json3 */
+            json3: {
+                [key: string]: unknown;
+            };
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "manual" | "asr";
+            /** Lang */
+            lang: string;
+            /** Translated From */
+            translated_from?: string | null;
         };
         /** SegmentOut */
         SegmentOut: {
@@ -419,6 +455,8 @@ export interface components {
         };
         /** VideoIn */
         VideoIn: {
+            /** From */
+            from?: number | null;
             /** Lead Female */
             lead_female?: string | null;
             /** Lead Male */
@@ -431,8 +469,12 @@ export interface components {
              * @default false
              */
             page_support: boolean;
+            /** Paused */
+            paused?: boolean | null;
             /** Switch */
             switch?: boolean | null;
+            /** Tab */
+            tab?: string | null;
             /** Url */
             url: string;
             /** Voice */
@@ -456,6 +498,7 @@ export interface components {
             video_key: string;
             /** Voice */
             voice?: string | null;
+            window?: components["schemas"]["SegmentsOut"] | null;
         };
         /** VideoVoicesOut */
         VideoVoicesOut: {

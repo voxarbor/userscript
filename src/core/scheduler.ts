@@ -2,7 +2,8 @@
 import type { Phrase } from './types';
 
 const TOLERANCE = 0.15; // start window around a phrase's start
-const LATE = 0.6; // a phrase whose audio came late still starts this far into it, rather than being skipped
+const LATE = 0.6; // this far into a phrase it still starts however little of it is left
+const MIN_REST = 0.7; // further in, a phrase is joined only while this much of it is left to hear
 const MAX_SHIFT = 1; // the longest a phrase waits for the one before it
 const REFETCH_MARGIN = 20; // refetch when this close to the window end
 const FADE = 0.08; // s: a phrase cut short fades out this long instead of ending mid-word
@@ -13,11 +14,29 @@ const HOLD_HIGH = 10; // ... and resume once this much is ready (owner: 20 s mad
 const READY_SHARE = 0.8; // a video with this share of its phrases voiced in a voice is ready in it
 const STUCK_MS = 8000; // held this long with a voiced run further on: skip the phrase without audio
 
-/** Phrases to start now: from 150 ms before their start to 600 ms into it (audio that came a little late is heard
- *  from there rather than skipped), not handled yet. */
-export function due<T extends Phrase>(segments: T[], t: number, playing: boolean, done?: { has(i: number): boolean } | null): T[] {
+/** Phrases to start now, of segments sorted by start and not handled yet (done). A phrase starts from 150 ms
+ *  before its start; up to 600 ms into it, it starts however little is left (a frame, or audio, a little late);
+ *  further in, it is joined where the video is while MIN_REST of it is left to hear: the switching on, a seek and a
+ *  change of voices all land in the middle of a phrase, and its audio often comes after its start (owner: the first
+ *  seconds of a ready video were silent). What is left ends with its audio or where the next phrase starts.
+ *  length(seg): the seconds of audio the phrase has here, undefined while it has none; left out: as long as its
+ *  slot. */
+export function due<T extends Phrase>(
+  segments: T[],
+  t: number,
+  playing: boolean,
+  done?: { has(i: number): boolean } | null,
+  length?: (seg: T) => number | undefined,
+): T[] {
   if (!playing) return [];
-  return segments.filter((s) => !(done && done.has(s.i)) && t >= s.start - TOLERANCE && t <= s.start + LATE);
+  return segments.filter((s, k) => {
+    if ((done && done.has(s.i)) || t < s.start - TOLERANCE) return false;
+    const len = length ? length(s) : s.end - s.start;
+    if (len == null) return false;
+    const after = segments[k + 1];
+    const left = Math.min(s.start + len, after ? after.start : Infinity) - Math.max(t, s.start);
+    return t <= s.start + LATE ? left > 0 : left >= MIN_REST;
+  });
 }
 
 /** The free time of seg's slot: from its start to the phrase after it in segments (sorted by start; to its own end

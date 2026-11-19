@@ -22,12 +22,41 @@ test('due: starts phrase within +-150 ms', () => {
 test('due: a phrase whose audio came a little late still starts, up to 600 ms into it (not skipped)', () => {
   assert.deepEqual(ids(due(segs, 5.2, true)), [1]);
   assert.deepEqual(ids(due(segs, 5.6, true)), [1]);
+  // however little of it is left to hear, as long as something is
+  const short = [seg(0, 5, 6)];
+  assert.deepEqual(ids(due(short, 5.5, true, null, () => 0.75)), [0]);
+  assert.deepEqual(due(short, 5.5, true, null, () => 0.5), []); // its audio is over by then
 });
 
-test('due: too early and too late phrases are not started', () => {
+test('due: too early phrases are not started, and neither is one that is over', () => {
   assert.deepEqual(due(segs, 4.8, true), []);
-  assert.deepEqual(due(segs, 5.65, true), []);
-  assert.deepEqual(due(segs, 6, true), []);
+  assert.deepEqual(due(segs, 8, true), []);
+  assert.deepEqual(due(segs, 9, true), []);
+});
+
+test('due: a phrase is joined in its middle (the start, a seek, another voice) while 0.7 s of it is left to hear', () => {
+  const three = () => 3; // seconds of audio: phrase 1 sounds from 5 to 8
+  assert.deepEqual(ids(due(segs, 5.65, true, null, three)), [1]);
+  assert.deepEqual(ids(due(segs, 6.5, true, null, three)), [1]);
+  assert.deepEqual(ids(due(segs, 7.25, true, null, three)), [1]);
+  assert.deepEqual(due(segs, 7.4, true, null, three), []); // 0.6 s left: the next phrase is waited for
+  assert.deepEqual(due(segs, 6.5, true, new Set([1]), three), []); // it sounds already
+  assert.deepEqual(due(segs, 6.5, false, null, three), []);
+});
+
+test('due: what is left of a phrase is counted to the end of its audio, and no further than the next phrase', () => {
+  assert.deepEqual(ids(due(segs, 5.75, true, null, () => 1.5)), [1]); // audio shorter than the slot: 0.75 s left
+  assert.deepEqual(due(segs, 5.9, true, null, () => 1.5), []);
+  const close = [seg(0, 1, 3), seg(1, 3, 6)];
+  const long = (s: { i: number }) => (s.i === 0 ? 5 : 3); // phrase 0 runs over its slot
+  assert.deepEqual(due(close, 2.5, true, null, long), []); // half a second until phrase 1: not worth starting
+  assert.deepEqual(ids(due(close, 2.25, true, null, long)), [0]);
+  assert.deepEqual(ids(due(close, 3.05, true, null, long)), [1]); // phrase 1 has begun: phrase 0 is not joined
+});
+
+test('due: a phrase whose audio is not here yet is not due', () => {
+  assert.deepEqual(due(segs, 5, true, null, () => undefined), []);
+  assert.deepEqual(due(segs, 6.5, true, null, () => undefined), []);
 });
 
 test('due: already handled phrases are excluded', () => {

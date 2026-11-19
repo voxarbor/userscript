@@ -108,3 +108,42 @@ test('signing in asks for a code and polls for the token; a refusal keeps the se
   assert.ok(refused instanceof ApiError);
   assert.deepEqual([refused.status, refused.body], [400, '{"error":"slow_down"}']);
 });
+
+test('opening a video at a place names this tab, as a poll does; a POST without a place names none', async () => {
+  const { sent, send } = fake(() => ({ responseText: '{}' }));
+  const api = new ServerApi(send, () => where);
+  await api.video({ url: 'u', page_support: true, from: 12.5 });
+  await api.segments('youtube:k', 12.5, false);
+  await api.video({ url: 'u', page_support: true });
+  const tab = /&tab=(\w+)$/.exec(sent[1]!.url)![1];
+  assert.equal(sent[0]!.data, `{"url":"u","page_support":true,"from":12.5,"tab":"${tab}"}`);
+  assert.equal(sent[2]!.data, '{"url":"u","page_support":true}');
+});
+
+test('every request is told to the journal when it ends: how long it took, the server\'s own time, the size', async () => {
+  const lines: string[] = [];
+  let now = 1000;
+  const answers: Record<string, Partial<HttpResponse> | 'error' | 'timeout'> = {
+    '/v1/videos': { responseText: '{"video_key":"k"}', responseHeaders: 'content-type: application/json\r\nServer-Timing: app;dur=12.3\r\n' },
+    '/v1/audio/ab.opus': { response: new ArrayBuffer(2048) },
+    '/v1/voices': { status: 503, responseText: 'busy' },
+    '/v1/voiced?url=u': 'timeout',
+  };
+  const { send } = fake((r) => {
+    now += 140;
+    return answers[r.url.slice('https://vox.test'.length)] ?? 'error';
+  });
+  const api = new ServerApi(send, () => where, (line) => lines.push(line), () => now);
+  await api.video({ url: 'u', page_support: true });
+  await api.bytes('/v1/audio/ab.opus');
+  await api.voices().catch(() => {});
+  await api.voiced('u').catch(() => {});
+  await api.speakers('k').catch(() => {});
+  assert.deepEqual(lines, [
+    'POST /v1/videos → 200, 140 ms (server 12.3 ms), 17 B',
+    'GET /v1/audio/ab.opus → 200, 140 ms, 2048 B',
+    'GET /v1/voices → HTTP 503, 140 ms',
+    'GET /v1/voiced?url=u → timeout, 140 ms',
+    'GET /v1/videos/k/speakers → network error, 140 ms',
+  ]);
+});

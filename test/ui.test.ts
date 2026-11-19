@@ -57,6 +57,8 @@ function host(over: Partial<UiHost> = {}) {
     onVoicesChanged: () => told.push('voices changed'),
     onConnectionChanged: () => told.push('connection changed'),
     openTab: (url) => told.push('open ' + url),
+    journal: () => '',
+    copy: async () => {},
     ...over,
   };
   const saved = (): Partial<Settings> => platform.getValue<Partial<Settings>>('settings', {});
@@ -462,4 +464,34 @@ test('the question about ready voices: a voice is taken or the viewer\'s own ask
   ask();
   question.drop(); // the page went to another video
   assert.deepEqual([answers, question.asked, doc.body.children.length], [['anna', ''], false, 0]);
+});
+
+test('«Діагностика» on «Основні»: «Копіювати журнал» copies the journal and says so; its copy in the console is a setting', async () => {
+  const copied: string[] = [];
+  let refuse = false;
+  const { ui, layers, settings, saved } = page({
+    journal: () => 'the journal',
+    copy: async (text) => {
+      if (refuse) throw new Error('no clipboard');
+      copied.push(text);
+    },
+  });
+  ui.openSettings();
+  const body = layers()[0]!.children[1]!;
+  assert.ok(texts(body.children).includes('Діагностика'));
+  const copy = body.all('button').find((b) => b.textContent === 'Копіювати журнал')!;
+  copy.fire('click');
+  await settle();
+  assert.deepEqual([copied, copy.textContent], [['the journal'], 'Скопійовано']);
+  refuse = true;
+  copy.fire('click');
+  await settle();
+  assert.deepEqual([copied.length, copy.textContent], [1, 'Не вдалося скопіювати']);
+
+  const label = body.all('label').find((l) => l.textContent === 'Писати журнал у консоль браузера')!;
+  const box = label.all('input')[0]!;
+  assert.deepEqual([box.type, box.checked], ['checkbox', false]);
+  box.checked = true;
+  box.fire('change');
+  assert.deepEqual([settings.debug, saved().debug], [true, true]);
 });

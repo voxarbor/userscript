@@ -5,9 +5,11 @@ import { due, fadeStop, foreignVolume, holdStep, isDucked, mustWait, nextStart, 
 import type { Run, SessionHost } from './session';
 
 const DUCK_TIME = 0.25;
+const PREP_MS = 1500; // the longest a ready video is held back at the switching on for its first audio (owner)
+const PREP_NEAR = 1.5; // s: a first phrase further ahead than this is not waited for, its audio comes in time
 
 export class Playback {
-  constructor(private readonly host: Pick<SessionHost, 'settings' | 'site' | 'setState'>) {}
+  constructor(private readonly host: Pick<SessionHost, 'settings' | 'site' | 'setState' | 'note'>) {}
 
   /** A volume we didn't set (see foreignVolume). tick() checks too: a frame can run before the volumechange
    *  event, and its ramp would start from the foreign value and hide it (the ~1/min blips seen in 0.2.11). */
@@ -34,6 +36,7 @@ export class Playback {
 
   tick(s: Run): void {
     if (s.stopped) return;
+    this.prepStep(s);
     const S = this.host.settings;
     const site = this.host.site;
     const v = s.video;
@@ -45,9 +48,9 @@ export class Playback {
     const ad = site.inAd ? site.inAd(v) : false;
     if (ad && s.sources.length) this.stopSources(s);
     if (!v.seeking && !ad) {
-      for (const seg of due(s.list, t, !v.paused, s.done)) {
+      for (const seg of due(s.list, t, !v.paused, s.done, (x) => s.bufs.get(x.i)?.duration)) {
         const buf = s.bufs.get(seg.i);
-        if (!buf) continue; // not ready in time: skipped once its window passes
+        if (!buf) continue; // not here yet: joined in its middle if it comes while enough of it is left
         s.done.add(seg.i);
         this.play(s, seg, buf, t);
       }
@@ -92,12 +95,54 @@ export class Playback {
     s.video.play().catch(() => {});
   }
 
+  /** A ready video as its phrases first come (owner): held back, for PREP_MS at most, while the audio of the phrase
+   *  at its place is on its way, so the voice-over starts with the picture and not seconds into it. Once a run, and
+   *  a state of its own: hold() never keeps a ready video. A video that was paused when switched on stays so until
+   *  then. Nothing to wait for (no phrase near, its audio here already, an ad): nothing happens. */
+  prepare(s: Run): void {
+    if (s.prepped) return;
+    s.prepped = true;
+    const v = s.video;
+    const t = v.currentTime;
+    const first = s.list.find((x) => !!x.audio && x.end > t);
+    if (s.status !== 'ready' || !first || first.start - t > PREP_NEAR || s.bufs.get(first.i)) return;
+    if (this.host.site.inAd && this.host.site.inAd(v)) return;
+    s.prep = { i: first.i, since: Date.now() };
+    if (!v.paused) {
+      s.held = true;
+      s.heldAt = Date.now();
+      v.pause();
+    }
+    s.prepTimer = setTimeout(() => this.tick(s), PREP_MS); // it goes on then whatever has come
+    this.host.setState('busy', 'Готуємо озвучку…');
+    this.host.note(`prep: the video waits for the audio of phrase ${first.i} (it starts at ${first.start.toFixed(2)}, the video is at ${t.toFixed(2)})`);
+  }
+
+  /** The end of prepare()'s wait: the audio is here, cannot be had, or the time is up. */
+  private prepStep(s: Run): void {
+    const p = s.prep;
+    if (!p) return;
+    const waited = Date.now() - p.since;
+    const why = s.bufs.get(p.i) ? 'its audio is here'
+      : !s.bufs.has(p.i) ? 'its audio is not coming'
+        : waited >= PREP_MS ? 'the time is up'
+          : s.offline || s.status !== 'ready' ? 'the video is not ready any more' : null;
+    if (!why) return;
+    clearTimeout(s.prepTimer);
+    s.prep = null;
+    this.host.note(`prep: the video goes on after ${waited} ms: ${why}`);
+    if (s.status === 'ready' && !s.offline) this.host.setState('on', '100%');
+    this.release(s);
+  }
+
   private play(s: Run, seg: Segment, buf: AudioBuffer, t: number): void {
     const prev = s.sources[s.sources.length - 1];
     const at = nextStart(prev ? prev.end : null, seg, roomOf(seg, buf.duration, s.list));
     const rate = s.video.playbackRate;
     const when = s.ctx.currentTime + Math.max(0, at - t) / rate;
     if (prev && prev.end > at) this.fadeSources(s, when, at); // seg cannot wait that long: faded out, not cut mid-word
+    this.host.note(`phrase ${seg.i} [${seg.start.toFixed(2)}–${seg.end.toFixed(2)}] sounds` +
+      (t > at ? ` from ${(t - at).toFixed(2)} s into its ${buf.duration.toFixed(2)} s` : ` in ${(at - t).toFixed(2)} s`) + `, the video is at ${t.toFixed(2)}`);
     const src = s.ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.value = rate;
@@ -115,6 +160,7 @@ export class Playback {
 
   /** waitForVoice (or a UK click on a paused video): keep the video paused until ~10 s of voiced audio is ready. */
   private hold(s: Run, t: number): void {
+    if (s.prep) return; // prepare() keeps the video for now
     const waiting = mustWait({ status: s.status, offline: s.offline, startHold: s.startHold,
       waitForVoice: this.host.settings.waitForVoice, known: !!s.key && s.windowEnd != null });
     if (!waiting) return this.release(s);
@@ -125,6 +171,10 @@ export class Playback {
       s.heldAt = Date.now();
       s.video.pause();
       this.host.setState('busy', 'Чекаю озвучку…');
-    } else if (step === 'release') this.release(s);
+      this.host.note(`hold: the video waits for the voice-over at ${t.toFixed(2)}, ${ahead.toFixed(1)} s are voiced ahead`);
+    } else if (step === 'release') {
+      this.host.note(`hold: the video goes on after ${Date.now() - s.heldAt} ms, ${ahead.toFixed(1)} s are voiced ahead`);
+      this.release(s);
+    }
   }
 }

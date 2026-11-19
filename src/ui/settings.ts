@@ -92,7 +92,29 @@ export class SettingsWindow {
   private mainTab(): HTMLElement[] {
     const connection = el('div');
     this.showConnection(connection);
-    return [heading('Підключення'), connection, heading('Відео'), el('div', { style: 'max-width:420px' }, ...this.videoControls())];
+    return [heading('Підключення'), connection, heading('Відео'), el('div', { style: 'max-width:420px' }, ...this.videoControls()),
+      heading('Діагностика'), ...this.diagnostics()];
+  }
+
+  // «Діагностика»: the journal of what the script did and when (kept in memory all the time), to send when the
+  // voice-over misbehaves; its copy in the browser's console is a setting (?vxdebug=1 in the address sets it too).
+  private diagnostics(): HTMLElement[] {
+    const settings = this.host.store.current;
+    const copy = el('button', { type: 'button', textContent: 'Копіювати журнал' });
+    copy.style.cssText = 'margin-top:4px;padding:8px 16px;border:0;border-radius:18px;background:rgba(255,255,255,.12);color:#fff;' +
+      'font:500 14px Roboto,Arial,sans-serif;cursor:pointer';
+    copy.addEventListener('click', () => {
+      this.host.copy(this.host.journal()).then(() => (copy.textContent = 'Скопійовано'), () => (copy.textContent = 'Не вдалося скопіювати'));
+    });
+    const box = el('input', { type: 'checkbox', checked: settings.debug });
+    box.style.cssText = 'margin:0 8px 0 0;accent-color:#f33;vertical-align:middle;width:16px;height:16px';
+    box.addEventListener('change', () => {
+      settings.debug = box.checked;
+      this.host.store.save();
+    });
+    return [note('Якщо озвучка мовчить або запізнюється: відтворіть проблему, натисніть «Копіювати журнал» і надішліть його. ' +
+      'У журналі час кожного кроку запуску; токена в ньому немає.'), copy,
+      el('label', { style: 'display:flex;align-items:center;min-height:32px;margin-top:6px;cursor:pointer' }, box, 'Писати журнал у консоль браузера')];
   }
 
   // Connected: whose account it is and «Відключити» (the token is forgotten here; the profile can revoke it).

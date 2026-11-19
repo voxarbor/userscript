@@ -6,6 +6,8 @@ export interface HttpResponse {
   responseText: string;
   /** The body as bytes, when the request asked for them. */
   response: unknown;
+  /** The answer's headers as one text, a line each (some script managers give none). */
+  responseHeaders?: string;
 }
 
 /** One request of GM_xmlhttpRequest, as the script makes it. */
@@ -32,6 +34,8 @@ export interface Platform {
   menu(title: string, run: () => void): void;
   /** Opens a page in a new tab (the script manager's way: a plain window.open from a site's page can be blocked). */
   openTab(url: string): void;
+  /** Puts the text on the clipboard (the script manager's way, else the page's, which may refuse). */
+  copy(text: string): Promise<void>;
 }
 
 declare function GM_getValue<T>(key: string, fallback: T): T;
@@ -39,6 +43,7 @@ declare function GM_setValue(key: string, value: unknown): void;
 declare function GM_xmlhttpRequest(request: HttpRequest): void;
 declare const GM_registerMenuCommand: ((title: string, run: () => void) => void) | undefined;
 declare const GM_openInTab: ((url: string, options: { active: boolean }) => void) | undefined;
+declare const GM_setClipboard: ((text: string, type: string) => void) | undefined;
 
 /** The script manager the userscript runs in. */
 export const scriptManager: Platform = {
@@ -52,6 +57,10 @@ export const scriptManager: Platform = {
     if (typeof GM_openInTab === 'function') GM_openInTab(url, { active: true });
     else window.open(url, '_blank', 'noopener');
   },
+  copy: async (text) => {
+    if (typeof GM_setClipboard === 'function') GM_setClipboard(text, 'text');
+    else await navigator.clipboard.writeText(text);
+  },
 };
 
 /** A platform in memory: what was kept, asked and put into the menu can be looked at. */
@@ -59,6 +68,7 @@ export class MemoryPlatform implements Platform {
   readonly requests: HttpRequest[] = [];
   readonly menus: { title: string; run: () => void }[] = [];
   readonly tabs: string[] = [];
+  readonly copied: string[] = [];
 
   constructor(readonly values: Record<string, unknown> = {}) {}
 
@@ -80,5 +90,9 @@ export class MemoryPlatform implements Platform {
 
   openTab(url: string): void {
     this.tabs.push(url);
+  }
+
+  async copy(text: string): Promise<void> {
+    this.copied.push(text);
   }
 }

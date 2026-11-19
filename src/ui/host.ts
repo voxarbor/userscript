@@ -23,6 +23,10 @@ export interface UiHost {
   onVoicesChanged(): void;
   /** The script was connected or disconnected (another token, or none). */
   onConnectionChanged(): void;
+  /** The diagnostic journal as text, for «Копіювати журнал». */
+  journal(): string;
+  /** Puts the text on the clipboard; it fails when the browser does not let it. */
+  copy(text: string): Promise<void>;
   /** Opens a page of the site in a new tab («Увійти»). */
   openTab(url: string): void;
 }

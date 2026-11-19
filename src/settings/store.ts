@@ -26,6 +26,8 @@ export interface Settings {
   /** Lead voice per gender when the speakers are told apart; '' = by the server's rule. */
   leadMale: string;
   leadFemale: string;
+  /** The diagnostic journal is also written to the browser's console as it grows. */
+  debug: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -39,6 +41,7 @@ export const DEFAULTS: Settings = {
   mode: '',
   leadMale: '',
   leadFemale: '',
+  debug: false,
 };
 
 /** Saved settings over defaults. 'male' was the 0.1.x default, so it is migrated to the new one. */
