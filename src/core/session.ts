@@ -94,6 +94,10 @@ export class Run {
   /** Grows at every change of voices: phrases asked for before it are not taken. */
   voices = 0;
   offline = false;
+  /** When the server stopped answering (Date.now()); null: it answers. */
+  downSince: number | null = null;
+  /** Quiet retries since then. */
+  downTries = 0;
   lastGet = 0;
   timer: ReturnType<typeof setTimeout> | undefined;
   busy = false;

@@ -4,13 +4,15 @@ import type { SegmentsOut, VideoIn, VideoOut } from '../api/client';
 import type { Settings } from '../settings/store';
 import type { Loader } from './loader';
 import type { Playback } from './playback';
-import { needFetch, outOfReach, preparedPercent, voiceMode, windowIncomplete } from './scheduler';
+import { WINDOW_S } from '../api/client';
+import { bufferedAhead, needFetch, outOfReach, preparedPercent, quietOutage, quietRetry, voiceMode, windowIncomplete } from './scheduler';
 import type { Run, SessionHost } from './session';
 
 const POLL_MS = 3000; // while the video is not ready
 const IDLE_MS = 1000; // when ready: only check the window edge
 const HEARTBEAT_MS = 60000; // a segments GET at least once a minute (owner): the server's idle cut is longer than that
 const RETRY_MS = 10000; // server unreachable
+const OPEN_WINDOW_S = 150; // the phrases an opening comes with (the server's OPEN_WINDOW, 150 s since 0.10.4)
 const HELD_POLL_MS = 1000; // while the video waits for the voice-over: release it as soon as enough is voiced
 
 /** Who voices a video: the voice, how the speakers are voiced and the lead voices. */
@@ -96,7 +98,7 @@ export class Poller {
         // the voices changed meanwhile: these phrases are the old ones', the next poll opens the video anew
         if (r.window && round === s.voices && mode === modeOf(voicesOf(s, S))) {
           s.lastGet = Date.now();
-          this.take(s, r.window, from, gen);
+          this.take(s, r.window, from, gen, OPEN_WINDOW_S);
           got = true;
         }
       }
@@ -106,7 +108,10 @@ export class Poller {
         Date.now() - s.lastGet >= HEARTBEAT_MS) await this.fetchWindow(s, s.key);
       else delay = IDLE_MS;
       if (s.status === 'error') throw fatal(s.error);
+      if (s.downSince !== null) this.host.note(`the server answers again after ${Date.now() - s.downSince} ms`);
       s.offline = false;
+      s.downSince = null;
+      s.downTries = 0;
       if (!s.stopped && !s.held) {
         // owner: the tooltip shows just how much of the video is prepared
         const pct = preparedPercent(s.status, s.progress);
@@ -128,12 +133,32 @@ export class Poller {
         this.host.setState('error', e.message);
         return this.host.toast(e.message);
       }
+      s.downSince ??= Date.now();
+      const ahead = this.ahead(s);
+      if (!s.offline && quietOutage(ahead, Date.now() - s.downSince)) {
+        // a restart of the server: the audio here plays on, the person is told nothing (owner 2026-11-19)
+        this.host.note(`the server did not answer (${e.message}): asked again quietly, ${ahead.toFixed(0)} s voiced ahead`);
+        delay = quietRetry(s.downTries++, RETRY_MS);
+        s.busy = false;
+        return this.next(s, delay);
+      }
       s.offline = true;
       this.playback.release(s);
       this.host.setState('offline', `Сервер озвучки ${wait ? 'зайнятий' : 'недоступний'}, повторю за 10 с`);
       delay = RETRY_MS;
     }
     s.busy = false;
+    this.next(s, delay);
+  }
+
+  /** Seconds of audio here (downloaded) ahead of the playback, without a gap. */
+  private ahead(s: Run): number {
+    const here = s.list.map((x) => (s.bufs.get(x.i) ? x : { ...x, audio: null }));
+    return bufferedAhead(here, s.video.currentTime, null);
+  }
+
+  /** After a poll: the audio of the window goes on loading and the next poll is set. */
+  private next(s: Run, delay: number): void {
     if (s.stopped) return;
     this.loader.pump(s);
     if (s.video.paused) this.playback.tick(s); // no frame loop while paused: keep the volume and the waitForVoice release current
@@ -152,11 +177,11 @@ export class Poller {
     const r = await this.host.api.segments(key, from, paused);
     // the voices changed meanwhile (the settings, or one speaker's voice on the server): the next poll refetches
     if (s.stopped || voices !== s.voices || mode !== modeOf(voicesOf(s, this.host.settings))) return;
-    this.take(s, r, from, gen);
+    this.take(s, r, from, gen, WINDOW_S);
   }
 
-  /** The phrases of the window asked for at `from`, in the seek generation `gen`, become the run's. */
-  private take(s: Run, r: SegmentsOut, from: number, gen: number): void {
+  /** The phrases of the window asked for at `from` (span s long), in the seek generation `gen`, become the run's. */
+  private take(s: Run, r: SegmentsOut, from: number, gen: number, span: number): void {
     const before = `${s.status}/${s.list.length}/${s.list.filter((x) => x.audio).length}`;
     s.status = r.status;
     s.progress = r.progress;
@@ -180,7 +205,7 @@ export class Poller {
       }
     }
     s.list = [...s.segs.values()].sort((a, b) => a.start - b.start);
-    if (gen === s.gen) s.windowEnd = from + 60;
+    if (gen === s.gen) s.windowEnd = from + span;
     const now = `${s.status}/${s.list.length}/${s.list.filter((x) => x.audio).length}`;
     if (now !== before) { // a poll that brings nothing new is not written down
       const at = s.list.find((x) => x.end > s.video.currentTime);

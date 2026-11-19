@@ -5,14 +5,17 @@ const TOLERANCE = 0.15; // start window around a phrase's start
 const LATE = 0.6; // this far into a phrase it still starts however little of it is left
 const MIN_REST = 0.7; // further in, a phrase is joined only while this much of it is left to hear
 const MAX_SHIFT = 1; // the longest a phrase waits for the one before it
-const REFETCH_MARGIN = 20; // refetch when this close to the window end
+const REFETCH_MARGIN = 100; // refetch when this close to the window end: so much voiced audio is kept ahead
 const FADE = 0.08; // s: a phrase cut short fades out this long instead of ending mid-word
 const KEEP_BEHIND = 30; // phrases (and their audio) are kept this far behind the position
-const KEEP_AHEAD = 120; // ... and this far ahead of it
+const KEEP_AHEAD = 160; // ... and this far ahead of it (a whole window)
 const HOLD_LOW = 1; // waitForVoice: pause when less voiced audio is ahead
 const HOLD_HIGH = 10; // ... and resume once this much is ready (owner: 20 s made the start too slow)
 const READY_SHARE = 0.8; // a video with this share of its phrases voiced in a voice is ready in it
 const STUCK_MS = 8000; // held this long with a voiced run further on: skip the phrase without audio
+const QUIET_AHEAD = 15; // s: a server away while this much audio is here ahead is asked again without a word
+const QUIET_MAX_MS = 180_000; // ... for this long at most
+const QUIET_RETRY_MS = [2000, 4000, 8000]; // then every RETRY_MS (poller.ts)
 
 /** Phrases to start now, of segments sorted by start and not handled yet (done). A phrase starts from 150 ms
  *  before its start; up to 600 ms into it, it starts however little is left (a frame, or audio, a little late);
@@ -243,4 +246,15 @@ export function preparedPercent(status: string | null, progress: number | null):
   if (status === 'ready') return 100;
   const p = progress ?? 0;
   return Math.round(p <= 1 ? p * 100 : p) || 0;
+}
+
+/** Whether a server that did not answer (down for downMs) is asked again without telling the person: while this
+ *  much audio is here ahead of the playback, for a while (a restart of the server passes unnoticed). */
+export function quietOutage(ahead: number, downMs: number): boolean {
+  return ahead >= QUIET_AHEAD && downMs < QUIET_MAX_MS;
+}
+
+/** The wait before asking a server that did not answer again, quietly: soon at first, then less often. */
+export function quietRetry(tries: number, most: number): number {
+  return Math.min(QUIET_RETRY_MS[tries] ?? most, most);
 }

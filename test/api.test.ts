@@ -89,8 +89,8 @@ test('a video is asked for by its key: the phrases of a minute, its voices and i
   const tab = /tab=([a-z0-9]+)/.exec(sent[0]!.url)?.[1]; // one id for the tab, the same in every poll
   assert.ok(tab && tab.length >= 6);
   assert.deepEqual(sent.map((r) => r.method + ' ' + r.url.slice('https://vox.test'.length)), [
-    `GET /v1/videos/youtube%3Aabc/segments?from=12.35&window=60&tab=${tab}`,
-    `GET /v1/videos/youtube%3Aabc/segments?from=0.00&window=60&paused=1&tab=${tab}`,
+    `GET /v1/videos/youtube%3Aabc/segments?from=12.35&window=150&tab=${tab}`,
+    `GET /v1/videos/youtube%3Aabc/segments?from=0.00&window=150&paused=1&tab=${tab}`,
     'GET /v1/videos/youtube%3Aabc/voices',
     'GET /v1/videos/youtube%3Aabc/speakers',
     'GET /v1/voiced?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc%26t%3D5',

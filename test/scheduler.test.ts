@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import { originalLang, pickCaption, ukrainianDub } from '../src/adapters/youtube/captions';
-import { due, firstToHear, nextStart, roomOf, readyVoices, needFetch, bufferedAhead, ramp, shouldDuck, mustWait, isDucked, foreignVolume, nextToLoad, reusable, voiceAhead, voiceMode, windowIncomplete, voicedAfterGap, fadeStop, holdStep, outOfReach, preparedPercent } from '../src/core/scheduler';
+import { due, firstToHear, nextStart, roomOf, readyVoices, needFetch, bufferedAhead, ramp, shouldDuck, mustWait, isDucked, foreignVolume, nextToLoad, reusable, voiceAhead, voiceMode, windowIncomplete, voicedAfterGap, fadeStop, holdStep, outOfReach, preparedPercent, quietOutage, quietRetry } from '../src/core/scheduler';
 import { groupVoices, voicedMark, fmtDur } from '../src/ui/format';
 
 const seg = (i: number, start: number, end: number, audio: string | null = `/v1/audio/${i}.opus`) => ({ i, start, end, uk: 'x', audio });
@@ -96,12 +96,12 @@ test('roomOf: the slot runs to the next phrase, the last one\'s to its own end; 
   assert.equal(roomOf(list[0]!, 4, list), 0);
 });
 
-test('needFetch: no window yet, or approaching its end', () => {
+test('needFetch: no window yet, or less than 100 s of it left (a server restart passes on what is here)', () => {
   assert.equal(needFetch(0, null), true);
-  assert.equal(needFetch(10, 60), false);
-  assert.equal(needFetch(39, 60), false);
-  assert.equal(needFetch(41, 60), true);
-  assert.equal(needFetch(70, 60), true);
+  assert.equal(needFetch(10, 150), false);
+  assert.equal(needFetch(49, 150), false);
+  assert.equal(needFetch(51, 150), true);
+  assert.equal(needFetch(170, 150), true);
 });
 
 test('bufferedAhead: up to the first phrase without audio', () => {
@@ -331,11 +331,19 @@ test('holdStep: held over 8 s, a video goes on when ten seconds are voiced past 
   assert.equal(holdStep({ ...held, heldMs: 8001 }, stuck.slice(0, 2), 0), null); // only 9 s from here
 });
 
-test('outOfReach: phrases ended over 30 s behind the position or starting over 120 s ahead of it', () => {
+test('outOfReach: phrases ended over 30 s behind the position or starting over 160 s ahead of it', () => {
   assert.equal(outOfReach(seg(0, 60, 69.9), 100), true);
   assert.equal(outOfReach(seg(0, 60, 70), 100), false);
-  assert.equal(outOfReach(seg(1, 220, 225), 100), false);
-  assert.equal(outOfReach(seg(1, 220.1, 225), 100), true);
+  assert.equal(outOfReach(seg(1, 260, 265), 100), false);
+  assert.equal(outOfReach(seg(1, 260.1, 265), 100), true);
+});
+
+test('quietOutage: a server away is asked again without a word while 15 s are here ahead, for three minutes', () => {
+  assert.equal(quietOutage(15, 0), true);
+  assert.equal(quietOutage(14.9, 0), false);
+  assert.equal(quietOutage(60, 179_999), true);
+  assert.equal(quietOutage(60, 180_000), false);
+  assert.deepEqual([0, 1, 2, 3, 9].map((n) => quietRetry(n, 10_000)), [2000, 4000, 8000, 10_000, 10_000]);
 });
 
 test('preparedPercent: a ready video is whole; progress is a share of 1 or a percentage', () => {

@@ -23,7 +23,9 @@ export type SpeakerView = Schemas['SpeakerViewOut'];
 export type DeviceCode = Schemas['DeviceCodeOut'];
 
 const TIMEOUT_MS = 30000;
-const WINDOW_S = 60; // the stretch of phrases one segments request asks for
+/** The stretch of phrases one segments request asks for: long enough that a server restart (a minute or so) passes
+ *  unheard on the audio already here (ahead of the refetch margin, scheduler.ts). */
+export const WINDOW_S = 150;
 
 /** A request the server refused (its HTTP status and answer) or that got no usable answer (status 0). */
 export class ApiError extends Error {

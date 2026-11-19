@@ -195,9 +195,9 @@ test('switching on opens the video on the server and asks for its phrases, then 
   await p.pass(1); // but the server hears of the viewer at least once a minute
   assert.deepEqual(p.asked.slice(4), ['GET k1 from 0']);
 
-  p.video.currentTime = 41; // 20 s before the end of the minute that was fetched
+  p.video.currentTime = 51; // 100 s before the end of the 150 s fetched: kept so far ahead for a server restart
   await p.pass(3000);
-  assert.deepEqual(p.asked.slice(5), ['GET k1 from 41']);
+  assert.deepEqual(p.asked.slice(5), ['GET k1 from 51']);
   assert.equal(p.asked.filter((a) => a.startsWith('POST')).length, 1); // the settings went once
 });
 
@@ -1152,4 +1152,32 @@ test('while a speaker\'s own words are played from the video, the voice-over sta
   assert.equal(p.sounds().length, 2); // the voice-over is back with the next phrase
   p.session.stop();
   p.session.original(true); // off: nothing to keep out
+});
+
+test('a server that goes away while audio is here ahead is asked again quietly; said once the audio runs low', async () => {
+  // owner 2026-11-19: a restart of the server must pass unheard; the viewer is told only when it would be heard
+  const p = page();
+  p.server.phrases = Array.from({ length: 100 }, (_, n) => phrase(n, n * 2, n * 2 + 2));
+  p.session.start();
+  await p.pass(0);
+  for (let i = 0; i < 40; i++) await p.pass(100); // the audio of the window comes
+  const shown = p.told.at(-1);
+  p.server.down = new ApiError(502, 'HTTP 502');
+  p.video.currentTime = 60; // under 100 s of the window left: asked for the next one
+  p.asked.length = 0;
+  await p.pass(1000);
+  assert.deepEqual([p.asked, p.told.at(-1)], [['GET k1 from 60'], shown]);
+  assert.ok(p.notes.some((n) => n.startsWith('the server did not answer (HTTP 502): asked again quietly')), p.notes.join('\n'));
+  await p.pass(2000); // soon again
+  await p.pass(4000);
+  assert.deepEqual([p.asked.length, p.told.at(-1)], [3, shown]);
+  p.server.down = null;
+  await p.pass(8000);
+  assert.ok(p.notes.some((n) => n.startsWith('the server answers again after')), p.notes.join('\n'));
+  assert.equal(p.told.at(-1), shown);
+
+  p.server.down = new ApiError(0, 'network error');
+  p.video.currentTime = 190; // little left here: the viewer would hear it
+  await p.pass(3000);
+  assert.equal(p.told.at(-1), 'offline: Сервер озвучки недоступний, повторю за 10 с');
 });
