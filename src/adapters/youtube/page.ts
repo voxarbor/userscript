@@ -1,6 +1,6 @@
 // What YouTube's page tells about the video: the player's response, and the caption track taken from it.
 import type { PageData } from '../../api/client';
-import { type AudioFormat, type AudioTrack, type CaptionTrack, extraTracks, listed, originalLang, pickCaption, ukrainianDub, type WantedTrack } from './captions';
+import { type AudioFormat, type AudioTrack, type CaptionTrack, extraTracks, listed, originalCaptions, originalLang, pickCaption, ukrainianDub, type WantedTrack } from './captions';
 
 /** One more caption track for the server (`page.tracks`). */
 type PageTrack = NonNullable<PageData['tracks']>[number];
@@ -56,7 +56,8 @@ export function readPlayer(player: Player | null): PlayerData | null {
     videoDetails: { videoId: vd.videoId, title: vd.title, lengthSeconds: vd.lengthSeconds, author: vd.author },
     captions: {
       playerCaptionsTracklistRenderer: {
-        audioTracks: copied(cr.audioTracks, (a) => ({ audioTrackId: a.audioTrackId })),
+        audioTracks: copied(cr.audioTracks, (a) => ({ audioTrackId: a.audioTrackId,
+          ...(a.captionTrackIndices ? { captionTrackIndices: copied(a.captionTrackIndices, (n) => Number(n)) } : {}) })),
         captionTracks: copied(cr.captionTracks, (t) => ({ languageCode: t.languageCode, kind: t.kind,
           name: (t.name && (t.name.simpleText || copied(t.name.runs, (r) => r.text || '').join(''))) || undefined })),
       },
@@ -121,6 +122,12 @@ export function trackUrl(own: string, track: WantedTrack): string {
   return url.toString();
 }
 
+/** The track the player's own timedtext request is of, in its own language (not the one it is translated into). */
+export function playerTrack(own: string): WantedTrack {
+  const q = new URL(own).searchParams;
+  return { lang: q.get('lang') || '', kind: q.get('kind') === 'asr' ? 'asr' : 'manual' };
+}
+
 /** The wanted tracks, fetched together over the player's own request `own`; one that cannot be had is left out,
  *  and so is one that no longer fits in `room` (weight) after those before it. */
 export async function moreTracks(own: string, wanted: WantedTrack[], get: (url: string) => Promise<Json3 | null>, room: number): Promise<PageTrack[]> {
@@ -152,7 +159,7 @@ export async function collectPage(): Promise<PageData | null> {
     subs: null,
     caption_tracks: listed(cr.captionTracks), // every track the page has, whichever of them are sent
   };
-  const pick = pickCaption(cr.captionTracks, lang);
+  const pick = pickCaption(originalCaptions(cr.captionTracks, cr.audioTracks), lang);
   if (!pick) return page;
   const btn = document.querySelector<HTMLElement>('#movie_player .ytp-subtitles-button');
   const wasOn = !!btn && btn.getAttribute('aria-pressed') === 'true';
@@ -178,19 +185,15 @@ export async function collectPage(): Promise<PageData | null> {
     if (btn && (btn.getAttribute('aria-pressed') === 'true') !== wasOn) btn.click(); // CC back as it was
   }
   if (!url) return page;
-  const want = new URL(url);
-  want.searchParams.set('fmt', 'json3');
-  want.searchParams.set('lang', pick.track.languageCode);
-  if (pick.subs === 'asr') want.searchParams.set('kind', 'asr');
-  else want.searchParams.delete('kind');
-  let json3 = await json3At(want.toString());
+  // never YouTube's translation (tlang): the player asks for one for a viewer who listens to a dub or chose
+  // translated captions, and the words would be in that language under the label of the track's own
+  let json3 = await json3At(trackUrl(url, { lang: pick.track.languageCode, kind: pick.subs }));
   let used: { lang: string | null; subs: 'manual' | 'asr' } = { lang: pick.track.languageCode, subs: pick.subs };
   if (!json3) {
-    // the token may be tied to the track the player chose: take that one as it is
-    const own = new URL(url);
-    own.searchParams.set('fmt', 'json3');
-    json3 = await json3At(own.toString());
-    used = { lang: own.searchParams.get('lang'), subs: own.searchParams.get('kind') === 'asr' ? 'asr' : 'manual' };
+    // the token may be tied to the track the player chose: take that one, in its own language
+    const theirs = playerTrack(url);
+    json3 = await json3At(trackUrl(url, theirs));
+    used = { lang: theirs.lang || null, subs: theirs.kind };
   }
   if (!json3) return page;
   // besides the main track: the speech's own tracks and English (extraTracks), as far as the server's limit goes

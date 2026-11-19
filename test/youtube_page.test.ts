@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { extraTracks, listed, originalLang, pickCaption, ukrainianDub } from '../src/adapters/youtube/captions';
-import { moreTracks, pageVideoId, readPlayer, trackUrl, weight } from '../src/adapters/youtube/page';
+import { extraTracks, listed, originalCaptions, originalLang, pickCaption, ukrainianDub } from '../src/adapters/youtube/captions';
+import { moreTracks, pageVideoId, playerTrack, readPlayer, trackUrl, weight } from '../src/adapters/youtube/page';
 
 /** An array of the page's world as a script in its own world (Firefox) sees it: reading works, but the page
  *  cannot call a function of ours, so every method that takes a callback throws. */
@@ -158,4 +158,22 @@ test('the video of the address: a watch page, a short, a live page; another page
   assert.equal(pageVideoId({ search: '', pathname: '/shorts/abcdefghijk' }), 'abcdefghijk');
   assert.equal(pageVideoId({ search: '?si=x', pathname: '/live/abc-efg_ijk' }), 'abc-efg_ijk');
   assert.equal(pageVideoId({ search: '', pathname: '/feed/subscriptions' }), null);
+});
+
+test('the player asking for a translation (a viewer listening to a dub) never makes the track sent one', () => {
+  // youtube:letg2G-Bnuc 2026-11-19: an English video, its Spanish AI dub played: the player's request had tlang=es and
+  // the Spanish text went as the English auto track
+  const own = 'https://www.youtube.com/api/timedtext?v=abcdefghijk&pot=TOKEN&lang=en&kind=asr&tlang=es&fmt=srv3';
+  const q = (u: string) => Object.fromEntries(new URL(u).searchParams);
+  assert.deepEqual(playerTrack(own), { lang: 'en', kind: 'asr' });
+  assert.deepEqual(q(trackUrl(own, playerTrack(own))), { v: 'abcdefghijk', pot: 'TOKEN', lang: 'en', kind: 'asr', fmt: 'json3' });
+  assert.deepEqual(q(trackUrl(own, { lang: 'en', kind: 'manual' })), { v: 'abcdefghijk', pot: 'TOKEN', lang: 'en', fmt: 'json3' });
+});
+
+test('with several audio tracks the captions sent are the original audio ones, not a dub ones', () => {
+  const tracks = [{ languageCode: 'es', kind: 'asr' }, { languageCode: 'en', kind: 'asr' }];
+  const audio = [{ audioTrackId: 'es.10', captionTrackIndices: [0] }, { audioTrackId: 'en.4', captionTrackIndices: [1] }];
+  assert.deepEqual(originalCaptions(tracks, audio), [tracks[1]]);
+  assert.deepEqual(originalCaptions(tracks, [{ audioTrackId: 'en.4' }]), tracks); // not told: all of them
+  assert.deepEqual(originalCaptions(tracks, []), tracks);
 });

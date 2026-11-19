@@ -8,6 +8,8 @@ export interface AudioFormat {
 
 export interface AudioTrack {
   audioTrackId?: string;
+  /** The caption tracks (indices into captionTracks) that go with this audio track. */
+  captionTrackIndices?: number[];
 }
 
 export interface CaptionTrack {
@@ -45,6 +47,16 @@ export function ukrainianDub(formats?: AudioFormat[] | null, audioTracks?: Audio
   const ids = (formats || []).map((x) => x.audioTrack && x.audioTrack.id)
     .concat((audioTracks || []).map((a) => a.audioTrackId));
   return base(originalLang(formats, audioTracks)) !== 'uk' && ids.some((id) => base(id) === 'uk');
+}
+
+/** The caption tracks of the original audio (a video with several audio tracks: YouTube's AI dubs have tracks of
+ *  their own); all of them when the page does not tell which go with which. */
+export function originalCaptions<T>(tracks: T[], audioTracks?: AudioTrack[] | null): T[] {
+  const original = (audioTracks || []).find((a) => /\.4$/.test(a.audioTrackId || ''));
+  const own = original && original.captionTrackIndices;
+  if (!own || !own.length) return tracks;
+  const kept = own.map((n) => tracks[n]).filter((t): t is T => t !== undefined);
+  return kept.length ? kept : tracks;
 }
 
 /** Caption track to send: manual in the original language, then its auto (asr) track, then any manual, then
