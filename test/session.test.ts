@@ -1127,3 +1127,29 @@ test('the journal tells the steps of a switching on', async () => {
     'video: play at 12.00',
   ]);
 });
+
+test('while a speaker\'s own words are played from the video, the voice-over stays out: nothing sounds, the original is at its volume, no waiting', async () => {
+  const p = page();
+  Object.assign(p.server, { windows: true, status: 'voicing', voicedUntil: 60, phrases: [phrase(0, 1, 9), phrase(1, 100, 104), phrase(2, 106, 109)] });
+  p.session.start();
+  await p.pass(0);
+  for (const t of [1, 1.125, 1.25, 1.375]) await p.frame(t);
+  assert.deepEqual([p.sounds().length, rounded(p.video.volume)], [1, 0.1]);
+
+  p.session.original(true);
+  assert.equal(p.sounds()[0]!.stopped, 'now');
+  p.server.voicedUntil = 0; // nothing voiced where the sample is: the video would be held back
+  p.video.currentTime = 100;
+  p.video.fire('seeking');
+  await p.pass(0);
+  for (const t of [100, 100.125, 100.25, 100.5, 101]) await p.frame(t);
+  assert.deepEqual([p.sounds().length, p.video.volume, p.video.paused], [1, 1, false]);
+
+  p.session.original(false);
+  p.server.voicedUntil = 160;
+  await p.pass(3000);
+  await p.frame(105.875);
+  assert.equal(p.sounds().length, 2); // the voice-over is back with the next phrase
+  p.session.stop();
+  p.session.original(true); // off: nothing to keep out
+});

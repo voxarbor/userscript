@@ -17,6 +17,8 @@ const TABS: [TabId, string][] = [['main', 'Основні'], ['voices', 'Гол�
 export class SettingsWindow {
   private win: { root: HTMLElement; show: (tab: TabId) => Promise<void> } | null = null;
   private signing = false; // «Підключити» waits for the site: one sign-in at a time, whether the window stays open or not
+  private signNote: string | null = null; // what the sign-in says now (its code, or why it failed); null: nothing
+  private connection: HTMLElement | null = null; // the box of the connection on «Основні», as shown last
   private readonly previews: Previews;
 
   /** voices(): every voice of the server. videoControls(): the video's settings as controls (the quick panel
@@ -93,7 +95,7 @@ export class SettingsWindow {
 
   // «Основні»: the connection to the account and the live video controls.
   private mainTab(): HTMLElement[] {
-    const connection = el('div');
+    const connection = (this.connection = el('div'));
     this.showConnection(connection);
     return [heading('Підключення'), connection, heading('Відео'), el('div', { style: 'max-width:420px' }, ...this.videoControls()),
       heading('Діагностика'), ...this.diagnostics()];
@@ -125,7 +127,7 @@ export class SettingsWindow {
   private showConnection(box: HTMLElement): void {
     const settings = this.host.store.current;
     const status = note(settings.token ? (settings.account ? `Підключено як ${settings.account}` : 'Підключено')
-      : 'Підключення потрібне, щоб перекладати й озвучувати нові відео: натисніть «Підключити», увійдіть на сайті й підтвердьте код.');
+      : this.signNote ?? 'Підключення потрібне, щоб перекладати й озвучувати нові відео: натисніть «Підключити», увійдіть на сайті й підтвердьте код.');
     status.dataset.connection = '';
     const button = el('button', { type: 'button', textContent: settings.token ? 'Відключити' : 'Підключити', disabled: this.signing });
     button.style.cssText = 'margin-top:4px;padding:8px 16px;border:0;border-radius:18px;background:#f1f1f1;color:#0f0f0f;' +
@@ -137,31 +139,36 @@ export class SettingsWindow {
         this.host.onConnectionChanged();
         this.showConnection(box);
       }
-      : () => void this.connect(box, button, status);
+      : () => void this.connect();
     box.replaceChildren(status, button);
   }
 
-  private async connect(box: HTMLElement, button: HTMLButtonElement, status: HTMLElement): Promise<void> {
+  // The sign-in outlives the tab it was started on: what it says is kept here and shown in the box «Основні» has
+  // now (the one it was started in may be gone: another tab was looked at, or the window closed and opened again).
+  private async connect(): Promise<void> {
     if (this.signing) return;
-    this.signing = button.disabled = true;
+    const show = (say: string | null): void => {
+      this.signNote = say;
+      if (this.connection) this.showConnection(this.connection);
+    };
+    this.signing = true;
+    show(null);
     const site = {
       api: this.host.api,
       openTab: (url: string) => this.host.openTab(url),
       wait: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)),
     };
     try {
-      const got = await signIn(site, deviceName(navigator.userAgent), (code) => {
-        status.textContent = `Код ${code}: перевірте, що на сайті той самий, і натисніть там «Підключити».`;
-      });
+      const got = await signIn(site, deviceName(navigator.userAgent), (code) =>
+        show(`Код ${code}: перевірте, що на сайті той самий, і натисніть там «Підключити».`));
       Object.assign(this.host.store.current, { token: got.token, account: `${got.login} · ${got.name}` });
       this.host.store.save();
       this.signing = false;
       this.host.onConnectionChanged();
-      this.showConnection(box);
+      show(null);
     } catch (e) {
-      status.textContent = (e as Error).message;
-    } finally {
-      this.signing = button.disabled = false;
+      this.signing = false;
+      show((e as Error).message);
     }
   }
 
@@ -224,9 +231,17 @@ export class SettingsWindow {
       const conf = sp.gender_confidence == null ? '' : ` ${Math.round(sp.gender_confidence * 100)}%`;
       const talk = sp.talk_s == null ? '' : `говорить ${fmtDur(sp.talk_s)}`;
       const leadSet = n === 0 && (sp.gender === 'male' ? r.lead_male : sp.gender === 'female' ? r.lead_female : null);
-      const sel = voiceSelect(list, voiced, sp.manual ? sp.voice : '', 'авто' + (sp.voice ? ` (${label(sp.voice)})` : ''), async (id) => {
-        await host.api.speakerVoice(key, sp.id, id || null);
-        host.onVoicesChanged(); // re-voiced from the viewer's position: refetch the window
+      let chosen = (sp.manual && sp.voice) || ''; // the voice the server has for the speaker; '': its own choice
+      const problem = el('div', { style: 'color:#f88;font-size:13px;margin-top:4px' });
+      const sel = voiceSelect(list, voiced, chosen, 'авто' + (sp.voice ? ` (${label(sp.voice)})` : ''), (id) => {
+        problem.textContent = '';
+        host.api.speakerVoice(key, sp.id, id || null).then(() => {
+          chosen = id;
+          host.onVoicesChanged(); // re-voiced from the viewer's position: refetch the window
+        }, (e: Error) => {
+          sel.value = chosen; // the server kept the voice before: the list says so again
+          problem.textContent = 'Не вдалося змінити голос: ' + e.message;
+        });
       });
       return el('div', { style: 'padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.06)' },
         el('div', { style: 'display:flex;align-items:center;gap:8px' },
@@ -234,7 +249,7 @@ export class SettingsWindow {
           el('span', { textContent: talk, style: 'opacity:.8;font-size:13px' }),
           playBtn('Оригінал', async () => previews.playOriginal(sp.original)),
           playBtn('Озвучка', () => (sp.voiced ? previews.playClip(sp.voiced) : Promise.reject(new Error('ще не озвучено'))))),
-        sel,
+        sel, problem,
         leadSet ? note('Головний мовець: його голос задає «Головний ' + (sp.gender === 'male' ? 'чоловічий' : 'жіночий') +
           ' голос» на вкладці «Голоси».') : '');
     })));

@@ -9,7 +9,7 @@ export class Previews {
 
   /** host.audio(): the audio context the samples play through. Not the voice-over's: resuming that one let a
    *  phrase frozen by a pause sound on over the sample. It runs only while a sample sounds. */
-  constructor(private readonly host: Pick<UiHost, 'api' | 'site' | 'audio'>) {}
+  constructor(private readonly host: Pick<UiHost, 'api' | 'site' | 'audio' | 'onOriginal'>) {}
 
   /** Plays a voice sample or a voiced phrase through Web Audio (fetched with the token like all audio), in place
    *  of the one that sounds. */
@@ -40,23 +40,28 @@ export class Previews {
     void this.host.audio().suspend(); // no audio thread kept running between samples
   }
 
-  /** Seeks the video to a speaker's sample and pauses at its end; one sample at a time. */
+  /** Seeks the video to a speaker's sample and pauses at its end; one sample at a time. The voice-over is told
+   *  to stay out meanwhile (host.onOriginal): the sample is the original, at its own volume and not voiced over. */
   playOriginal(o: { start: number; end: number } | null): void {
     const v = this.host.site.getVideo();
     if (!v || !o) return;
     this.stopOriginal();
     const stopAt = (): void => {
-      if (v.currentTime >= o.end) v.pause();
-      if (v.currentTime >= o.end || v.currentTime < o.start - 1) this.stopOriginal();
+      const over = v.currentTime >= o.end;
+      if (over && v.currentTime < o.end + 1) v.pause(); // played to its end; further on, the viewer has seeked away
+      if (over || v.currentTime < o.start - 1) this.stopOriginal();
     };
     this.original = { video: v, stopAt };
+    this.host.onOriginal(true);
     v.currentTime = o.start;
     v.addEventListener('timeupdate', stopAt);
     v.play().catch(() => {});
   }
 
   stopOriginal(): void {
-    if (this.original) this.original.video.removeEventListener('timeupdate', this.original.stopAt);
+    if (!this.original) return;
+    this.original.video.removeEventListener('timeupdate', this.original.stopAt);
     this.original = null;
+    this.host.onOriginal(false);
   }
 }

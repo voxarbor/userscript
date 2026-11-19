@@ -21,6 +21,8 @@ export interface UiHost {
   onVoiceVolume(): void;
   /** Who voices the video was changed: the voice, the speakers' mode, a lead voice or one speaker's voice. */
   onVoicesChanged(): void;
+  /** A speaker's own words are played from the video (on), or no longer: the voice-over stays out of them. */
+  onOriginal(on: boolean): void;
   /** The script was connected or disconnected (another token, or none). */
   onConnectionChanged(): void;
   /** The diagnostic journal as text, for «Копіювати журнал». */

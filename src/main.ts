@@ -91,6 +91,7 @@ function wire(adapter: SiteAdapter): void {
     audio: samples,
     onToggle: () => (session.on ? session.stop() : startChecked()),
     onVoiceVolume: () => session.voiceVolumeChanged(),
+    onOriginal: (on) => session.original(on),
     onVoicesChanged() {
       const url = adapter.getVideoUrl();
       if (session.on && url) take(url, ''); // chosen in the settings while it plays: this video is voiced so too
@@ -142,7 +143,7 @@ function wire(adapter: SiteAdapter): void {
 
   // A video that is ready in other voices (owner): offer them before it is voiced anew in the viewer's own. The
   // voice taken holds for this video only and is remembered ('' : «anew in my own»); the settings stay as they are.
-  const sample = new Previews({ api: server, site: adapter, audio: samples }); // one: a new ▶ stops the sample before
+  const sample = new Previews({ api: server, site: adapter, audio: samples, onOriginal: () => {} }); // one: a new ▶ stops the sample before
   const readyQuestion = new ReadyQuestion((path) => sample.playClip(path), () => sample.stopClip());
   const taken = (): [string, string][] => platform.getValue<[string, string][]>('videoVoice', []);
   const kept = (url: string | null): string | undefined => taken().find(([u]) => u === url)?.[1];

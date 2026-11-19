@@ -45,7 +45,8 @@ export class Playback {
     const now = performance.now();
     const dt = Math.min(DUCK_TIME, (now - s.lastTick) / 1000);
     s.lastTick = now;
-    const ad = site.inAd ? site.inAd(v) : false;
+    // an ad plays in the video's place, or a speaker's own words are listened to: the voice-over stays out
+    const ad = s.original || (site.inAd ? site.inAd(v) : false);
     if (ad && s.sources.length) this.stopSources(s);
     if (!v.seeking && !ad) {
       for (const seg of due(s.list, t, !v.paused, s.done, (x) => s.bufs.get(x.i)?.duration)) {

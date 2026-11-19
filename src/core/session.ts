@@ -123,6 +123,8 @@ export class Run {
   prepTimer: ReturnType<typeof setTimeout> | undefined;
   /** The video stalls (it buffers): what sounds waits with it. */
   stalled = false;
+  /** A speaker's own words are being played from the video: the voice-over stays out of them. */
+  original = false;
   lastTick = 0;
   raf = 0;
 
@@ -312,6 +314,16 @@ export class VoiceoverSession {
     if (s.held && !s.startHold && !lost) s.video.play().catch(() => {});
     this.host.note('off');
     this.host.setState('idle');
+  }
+
+  /** A speaker's own words are played from the video (the settings' «Оригінал»), or no longer: meanwhile nothing
+   *  sounds or starts, the original is at its own volume and the video is not held back. */
+  original(on: boolean): void {
+    const s = this.run;
+    if (!s) return;
+    s.original = on;
+    if (on) this.playback.stopSources(s);
+    this.host.note(`the original's sample: ${on ? 'on' : 'off'}`);
   }
 
   /** The voice-over's volume was changed in the settings. */

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 
-import type { SpeakersView, SpeakerView, Voice } from '../src/api/client';
+import { ApiError, type SpeakersView, type SpeakerView, type Voice } from '../src/api/client';
 import { MemoryPlatform } from '../src/platform/gm';
 import { SERVER, type Settings, SettingsStore } from '../src/settings/store';
 import { videoControls } from '../src/ui/controls';
@@ -58,6 +58,7 @@ function host(over: Partial<UiHost> = {}) {
     onVoiceVolume: () => told.push('voice volume'),
     onVoicesChanged: () => told.push('voices changed'),
     onConnectionChanged: () => told.push('connection changed'),
+    onOriginal: (on) => told.push('original ' + on),
     openTab: (url) => told.push('open ' + url),
     journal: () => '',
     copy: async () => {},
@@ -272,7 +273,7 @@ test('«Підключити» shows the code, opens the site on it and keeps th
   connect.fire('click');
   connect.fire('click'); // pressed again while it waits: one sign-in
   await settle();
-  assert.equal(connect.disabled, true);
+  assert.equal(button('Підключити')!.disabled, true);
   assert.match(status(), /^Код BCDF-GHJK:/);
   assert.deepEqual(told, ['device Firefox · Android', `open ${SERVER}/panel/connect?code=BCDF-GHJK`]);
   await vi.advanceTimersByTimeAsync(5000);
@@ -505,6 +506,7 @@ test('a sample plays in place of the one before; stopped while it was on its way
     api: { bytes: () => new Promise<ArrayBuffer>((give) => waiting.push(() => give(new ArrayBuffer(1000)))) } as unknown as UiHost['api'],
     site: { getVideo: () => null, getPlayer: () => null },
     audio: () => (contexts[0] as unknown as AudioContext | undefined) ?? new AudioContext(),
+    onOriginal: () => {},
   });
   const first = previews.playClip('/a');
   await settle();
@@ -541,4 +543,103 @@ test('the question about ready voices silences its sample when it goes', () => {
   question.ask({ ready: [{ voice: 'anna', label: 'Анна', share: 1, sample: '/s' }], own: 'Борис' }, () => {});
   question.drop();
   assert.equal(stopped, 1);
+});
+
+test('a sign-in goes on while another tab of the window is looked at: back on «Основні» its code, its end or its failure is there', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0' });
+  let refuse = true;
+  const made = host();
+  const api = { ...made.h.api, deviceToken: async () => {
+    if (refuse) throw new ApiError(400, 'HTTP 400', '{"error":"access_denied"}');
+    return { token: 'vxa_new', login: 'user', name: 'Мій телефон' };
+  } };
+  const { ui, layers, tabs, settings } = page({ api });
+  ui.openSettings();
+  const layer = layers()[0]!;
+  const button = (label: string) => layer.all('button').find((b) => b.textContent === label);
+  const status = () => layer.all('div').find((d) => d.dataset.connection !== undefined)!.textContent;
+  button('Підключити')!.fire('click');
+  await settle();
+  tabs()[1]!.fire('click'); // «Голоси», while the site is being asked
+  await settle();
+  tabs()[0]!.fire('click');
+  assert.match(status(), /^Код BCDF-GHJK:/); // the code is still shown
+  assert.equal(button('Підключити')!.disabled, true);
+
+  tabs()[1]!.fire('click');
+  await vi.advanceTimersByTimeAsync(5000); // refused on the site, while «Голоси» is shown
+  tabs()[0]!.fire('click');
+  assert.deepEqual([status(), button('Підключити')!.disabled], ['На сайті відмовлено', false]); // said, and it can be tried again
+
+  refuse = false;
+  button('Підключити')!.fire('click');
+  await settle();
+  tabs()[2]!.fire('click');
+  await vi.advanceTimersByTimeAsync(5000);
+  tabs()[0]!.fire('click');
+  assert.deepEqual([settings.token, status()], ['vxa_new', 'Підключено як user · Мій телефон']);
+  assert.ok(button('Відключити'));
+});
+
+test('a voice for a speaker that the server refuses: the list goes back to the voice before and says why', async () => {
+  const made = host();
+  let down = true;
+  const api = { ...made.h.api, speakerVoice: async (key: string, id: string) => {
+    if (down) throw new ApiError(403, 'HTTP 403');
+    return speaker(id);
+  } };
+  const { ui, layers, tabs, told } = page({ videoKey: () => 'k1', api });
+  made.speakers.speakers = [speaker('S2', { gender: 'female', voice: 'anna', manual: true })]; // the server api is asked for
+  ui.openSettings();
+  tabs()[2]!.fire('click');
+  await settle();
+  const card = layers()[0]!.children[1]!.children[0]!.children[0]!;
+  const list = card.all('select')[0]!;
+  list.value = 'robot';
+  list.fire('change');
+  await settle();
+  assert.equal(list.value, 'anna');
+  assert.match(card.textContent, /Не вдалося змінити голос: HTTP 403/);
+  assert.deepEqual(told, []); // the session is told of nothing
+
+  down = false;
+  list.value = 'robot';
+  list.fire('change');
+  await settle();
+  assert.equal(list.value, 'robot');
+  assert.doesNotMatch(card.textContent, /Не вдалося/);
+  assert.deepEqual(told, ['voices changed']);
+  down = true;
+  list.value = 'borys';
+  list.fire('change');
+  await settle();
+  assert.equal(list.value, 'robot'); // back to the voice the server has, not to the first one
+});
+
+test('a speaker\'s own words: the video goes to them and plays, the voice-over is told to stay out, and it stops at their end', () => {
+  const doc = installDom();
+  const video = Object.assign(doc.createElement('video'), { currentTime: 50, paused: true,
+    play() { this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; } });
+  const told: string[] = [];
+  const previews = new Previews({ api: {} as UiHost['api'], site: { getVideo: () => video as unknown as HTMLVideoElement, getPlayer: () => null },
+    audio: () => { throw new Error('no sound here'); }, onOriginal: (on) => told.push('original ' + on) });
+  previews.playOriginal({ start: 120, end: 125 });
+  assert.deepEqual([told, video.currentTime, video.paused], [['original true'], 120, false]);
+  video.currentTime = 123;
+  video.fire('timeupdate');
+  assert.deepEqual([told.length, video.paused], [1, false]);
+  video.currentTime = 125.1;
+  video.fire('timeupdate');
+  assert.deepEqual([told, video.paused], [['original true', 'original false'], true]);
+  video.paused = false;
+  video.fire('timeupdate'); // the listener is gone: the viewer's own playing is left alone
+  assert.equal(video.paused, false);
+
+  previews.playOriginal({ start: 120, end: 125 });
+  video.currentTime = 300; // the viewer seeks far away meanwhile: not paused there, the sample is just over
+  video.fire('timeupdate');
+  assert.deepEqual([told.slice(2), video.paused], [['original true', 'original false'], false]);
+  previews.stopOriginal(); // nothing plays: nothing to tell
+  assert.equal(told.length, 4);
 });
