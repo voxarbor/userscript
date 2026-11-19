@@ -336,8 +336,8 @@ export interface components {
         };
         /**
          * PageTrackIn
-         * @description One more caption track of the page, besides the one in PageIn.subs/json3 (the script 0.10+ sends the
-         *     speech's own tracks and YouTube's automatic English one).
+         * @description One more caption track of the page, besides the one in PageIn.subs/json3, which is not repeated here (the
+         *     script 0.10+ sends the tracks in the language spoken, the author's and YouTube's own, and the English ones).
          */
         PageTrackIn: {
             /** Json3 */
