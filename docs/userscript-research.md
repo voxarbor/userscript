@@ -282,7 +282,7 @@ INFO video youtube:wdpjv2enZLM: no page within 20 s, fetching with yt-dlp
 **Емуляція** (Playwright 1.49.1 у docker `pw-local:1.49.1`, headless Chromium з профілями Pixel 7 та iPhone 14,
 порівняння з Desktop Chrome; скрипт `probe.py` і `extra.py` у scratchpad сесії, не в репозиторії):
 
-- Хост — датацентр (Hetzner, Гельсінкі). **YouTube заблокував відтворення**: `playabilityStatus = LOGIN_REQUIRED`
+- Хост — сервер у датацентрі. **YouTube заблокував відтворення**: `playabilityStatus = LOGIN_REQUIRED`
   («Sign in to confirm you're not a bot») на m. і на www, для wdpjv2enZLM і для jNQXAC9IVRw. Тому
   `captionTracks` і запити timedtext/`pot` на справжньому відео перевірити **не вдалося**. Обхід через домашній
   IP власника вимагає його дозволу й не робився.
