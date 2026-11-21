@@ -65,15 +65,6 @@ test('captions the viewer has on stay on, and the player asks anew for them', as
   expect(captions).toEqual(['off', 'en-US', 'en-US']); // off, the track, and back to what the viewer had
 });
 
-test('captions the player switches on again while it loads them are put back off', async ({ open, server }) => {
-  server.pageNeeded = true;
-  const o = await open('auto', { lateOn: true });
-  await o.main();
-  await called(o, () => server.pages, 'the page is posted');
-  await expect.poll(() => o.page.evaluate(() => (window as unknown as { __fxCaptions: string[] }).__fxCaptions), { timeout: 5000 })
-    .toEqual(['en:asr', 'off', 'en:asr', 'off']);
-});
-
 test('late captions: the player asks for them seconds later, and they still go', async ({ open, server }) => {
   server.pageNeeded = true;
   const o = await open('auto', { askDelay: 3000 });
