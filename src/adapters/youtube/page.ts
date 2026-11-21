@@ -161,15 +161,24 @@ async function ownRequest(videoId: string, ask: (() => Promise<() => void>) | nu
 async function captionsOn(p: PlayerApi, track: { languageCode: string; kind?: string }): Promise<() => void> {
   const set = (value: object): void =>
     p.setOption!('captions', 'track', typeof cloneInto === 'function' ? cloneInto(value, window) : value);
-  const now = p.getOption!('captions', 'track') as { languageCode?: string } | null | undefined;
-  const wasOn = p.isSubtitlesOn ? !!p.isSubtitlesOn() : !!(now && now.languageCode);
-  const had = (wasOn && now ? JSON.parse(JSON.stringify(now)) : {}) as object;
+  const now = (): { languageCode?: string } | null | undefined => p.getOption!('captions', 'track') as { languageCode?: string } | null;
+  const on = (): boolean => (p.isSubtitlesOn ? !!p.isSubtitlesOn() : !!now()?.languageCode);
+  const wasOn = on();
+  const had = (wasOn ? JSON.parse(JSON.stringify(now() || {})) : {}) as object;
   if (wasOn) {
     set({});
     await pause(150);
   }
   set(track);
-  return () => set(had);
+  // the player may still be loading its captions when they are put back, and switch them on after (seen on
+  // youtube.com): looked at again a while later
+  const back = (): void => {
+    if (on() !== wasOn) set(had);
+  };
+  return () => {
+    set(had);
+    for (const ms of [1000, 3000]) setTimeout(back, ms);
+  };
 }
 
 /** Captions on with the player's CC button (a computer's player without the API): pressed twice when they were

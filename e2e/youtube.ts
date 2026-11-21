@@ -24,6 +24,9 @@ export interface PlayerOptions {
   captionsOn?: boolean;
   /** timedtext answers a track's own address (no pot) too. */
   baseUrlWorks?: boolean;
+  /** Captions switched off soon after they were switched on come on again once the player has loaded them (seen
+   *  on youtube.com). */
+  lateOn?: boolean;
 }
 
 const MEDIA = wav(300, 0);
@@ -90,8 +93,11 @@ function fakePlayer(): void {
       void fetch('/api/timedtext?' + q, { credentials: 'include' });
     }, Number(fx.askDelay ?? 300));
   };
+  let loading: ReturnType<typeof setTimeout> | undefined;
   const set = (t: Track | null | undefined): void => {
+    const was = track;
     track = t && t.languageCode && tracks.length ? { languageCode: t.languageCode, kind: t.kind || '' } : {};
+    if (fx.lateOn && was.languageCode && !track.languageCode && loading === undefined) loading = setTimeout(() => set(was), 700);
     shown.push(track.languageCode ? track.languageCode + (track.kind ? ':' + track.kind : '') : 'off');
     if (btn) btn.setAttribute('aria-pressed', String(!!track.languageCode));
     if (track.languageCode) ask(track);
