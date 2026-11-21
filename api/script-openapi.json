@@ -986,6 +986,17 @@
       ],
       "title": "Error"
      },
+     "mode_refused": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mode Refused"
+     },
      "page_needed": {
       "title": "Page Needed",
       "type": "boolean"
@@ -1037,6 +1048,28 @@
        }
       ],
       "title": "Voice"
+     },
+     "voice_kept": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice Kept"
+     },
+     "voice_refused": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voice Refused"
      },
      "window": {
       "anyOf": [
@@ -1699,7 +1732,7 @@
   },
   "/v1/videos/{key}/voices": {
    "get": {
-    "description": "How many of the video's translated phrases have audio, per voice that has any.",
+    "description": "How many of the video's translated phrases have audio, per voice that has any (not another's own voice).",
     "operationId": "get_video_voices_v1_videos__key__voices_get",
     "parameters": [
      {
@@ -1799,7 +1832,7 @@
   },
   "/v1/voices": {
    "get": {
-    "description": "Every voice but the ones switched off in the admin «Голоси»: the default one first, the rest by name.",
+    "description": "Every voice but the ones switched off in the admin «Голоси»: the default one first, the rest by name; a\nclient's own voices to them alone.",
     "operationId": "get_voices_v1_voices_get",
     "parameters": [
      {

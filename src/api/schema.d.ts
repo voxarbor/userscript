@@ -139,7 +139,7 @@ export interface paths {
         };
         /**
          * Get Video Voices
-         * @description How many of the video's translated phrases have audio, per voice that has any.
+         * @description How many of the video's translated phrases have audio, per voice that has any (not another's own voice).
          */
         get: operations["get_video_voices_v1_videos__key__voices_get"];
         put?: never;
@@ -180,7 +180,8 @@ export interface paths {
         };
         /**
          * Get Voices
-         * @description Every voice but the ones switched off in the admin «Голоси»: the default one first, the rest by name.
+         * @description Every voice but the ones switched off in the admin «Голоси»: the default one first, the rest by name; a
+         *     client's own voices to them alone.
          */
         get: operations["get_voices_v1_voices_get"];
         put?: never;
@@ -486,6 +487,8 @@ export interface components {
             duration: number | null;
             /** Error */
             error: string | null;
+            /** Mode Refused */
+            mode_refused?: string | null;
             /** Page Needed */
             page_needed: boolean;
             /** Refused */
@@ -498,6 +501,10 @@ export interface components {
             video_key: string;
             /** Voice */
             voice?: string | null;
+            /** Voice Kept */
+            voice_kept?: string | null;
+            /** Voice Refused */
+            voice_refused?: string | null;
             window?: components["schemas"]["SegmentsOut"] | null;
         };
         /** VideoVoicesOut */
