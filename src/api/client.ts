@@ -1,5 +1,6 @@
 // The server's script API (/v1) as the userscript calls it: JSON in and out, audio as bytes. The shapes come from
 // the server's OpenAPI (schema.d.ts, generated): a change of the API there fails this module's type check.
+import { type Proposed, said } from '../core/said';
 import type { HttpRequest } from '../platform/gm';
 import type { components } from './schema';
 
@@ -27,8 +28,11 @@ const TIMEOUT_MS = 30000;
  *  unheard on the audio already here (ahead of the refetch margin, scheduler.ts). */
 export const WINDOW_S = 150;
 
-/** A request the server refused (its HTTP status and answer) or that got no usable answer (status 0). */
+/** A request the server refused (its HTTP status and answer) or that got no usable answer (status 0). said: the
+ *  words for the person in its answer (`message`, proposed), as safe text; null when it gave none. */
 export class ApiError extends Error {
+  readonly said: string | null;
+
   constructor(
     readonly status: number,
     message: string,
@@ -36,6 +40,11 @@ export class ApiError extends Error {
   ) {
     super(message);
     this.name = 'ApiError';
+    let answer: Proposed | null = null;
+    try {
+      answer = JSON.parse(body) as Proposed | null;
+    } catch {}
+    this.said = said(answer && answer.message);
   }
 }
 
@@ -65,7 +74,7 @@ export class ServerApi {
     return this.ask('POST', '/v1/videos', body.from == null ? body : { ...body, tab: this.tab }, false);
   }
 
-  /** The phrases of the minute from `from` (seconds). paused: the viewer does not watch now, so the video gets
+  /** The phrases of the window (WINDOW_S) from `from` (seconds). paused: the viewer does not watch now, so the video gets
    *  no viewer priority. */
   segments(key: string, from: number, paused: boolean): Promise<SegmentsOut> {
     const query = `from=${from.toFixed(2)}&window=${WINDOW_S}` + (paused ? '&paused=1' : '') + `&tab=${this.tab}`;

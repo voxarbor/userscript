@@ -1,4 +1,4 @@
-// Quick settings over the player. Built without innerHTML (Trusted Types).
+// Quick settings over the player.
 import type { SiteAdapter } from '../adapters/types';
 import { el, overPage, shield } from './dom';
 import { PANEL_CSS } from './styles';
@@ -27,13 +27,13 @@ export class QuickPanel {
 
   private open(): void {
     const panel = (this.panel = el('div', {}, ...this.controls()));
-    let player = this.site.getPlayer && this.site.getPlayer();
+    let player = this.site.getPlayer();
     // a phone's portrait player is too low: a sheet at the bottom instead, 12 px from both edges of what is seen
     // (not a width in vw: that counts a scrollbar in)
     if (player && player.clientHeight < 320) player = null;
     // in the player: over its bottom bar, or (the site says so) under the buttons at its top, clear of what the
     // site keeps over the player's bottom
-    const inPlayer = this.site.panelAtTop && this.site.panelAtTop() ? 'top:72px;right:12px;width:min(340px,calc(100% - 24px));max-height:calc(100% - 184px);'
+    const inPlayer = this.site.panelAtTop() ? 'top:72px;right:12px;width:min(340px,calc(100% - 24px));max-height:calc(100% - 184px);'
       : 'bottom:64px;right:12px;width:min(340px,calc(100% - 24px));max-height:calc(100% - 76px);';
     panel.style.cssText = (player ? 'position:absolute;' + inPlayer
       : 'position:fixed;bottom:12px;left:12px;right:12px;max-width:420px;margin-left:auto;max-height:70vh;') +

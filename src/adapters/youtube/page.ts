@@ -9,6 +9,7 @@ type PageTrack = NonNullable<PageData['tracks']>[number];
 interface PageCaptionTrack {
   languageCode: string;
   kind?: string;
+  baseUrl?: string;
   name?: { simpleText?: string; runs?: ArrayLike<{ text?: string }> };
 }
 
@@ -24,7 +25,17 @@ export interface Player {
   getPlayerResponse?(): PlayerResponse | undefined;
 }
 
-interface PlayerElement extends HTMLElement, Player {
+/** The player's API the captions are switched with (www and m.youtube.com have it). */
+interface PlayerApi extends Player {
+  isSubtitlesOn?(): boolean;
+  getOption?(module: string, option: string): unknown;
+  setOption?(module: string, option: string, value: unknown): void;
+}
+
+/** Firefox: an object of the script's world made the page's, so that the page's function can read it. */
+declare const cloneInto: ((value: object, target: object) => object) | undefined;
+
+interface PlayerElement extends HTMLElement, PlayerApi {
   /** Firefox: the page's own object behind the content script's view of it. */
   wrappedJSObject?: PlayerElement;
 }
@@ -58,7 +69,7 @@ export function readPlayer(player: Player | null): PlayerData | null {
       playerCaptionsTracklistRenderer: {
         audioTracks: copied(cr.audioTracks, (a) => ({ audioTrackId: a.audioTrackId,
           ...(a.captionTrackIndices ? { captionTrackIndices: copied(a.captionTrackIndices, (n) => Number(n)) } : {}) })),
-        captionTracks: copied(cr.captionTracks, (t) => ({ languageCode: t.languageCode, kind: t.kind,
+        captionTracks: copied(cr.captionTracks, (t) => ({ languageCode: t.languageCode, kind: t.kind, baseUrl: t.baseUrl,
           name: (t.name && (t.name.simpleText || copied(t.name.runs, (r) => r.text || '').join(''))) || undefined })),
       },
     },
@@ -77,12 +88,30 @@ export function pageVideoId(loc: Pick<Location, 'search' | 'pathname'>): string 
   return new URLSearchParams(loc.search).get('v') || (loc.pathname.match(/^\/(?:shorts|live)\/([\w-]{11})/) || [])[1] || null;
 }
 
-/** The response of the page's player, when it is of the video the address names: on a short's page
- *  #movie_player is the hidden player of the video watched before, and its data are that video's. */
-function playerResponse(): PlayerData | null {
-  const mp = document.getElementById('movie_player') as PlayerElement | null;
-  const pr = readPlayer(mp && (mp.wrappedJSObject || mp));
-  return pr && pr.videoDetails.videoId === pageVideoId(location) ? pr : null;
+/** Why a page has no captions for the server (PageIn.subs_missing, docs/contract-proposal.md): no player of the
+ *  page's video, the video has no caption tracks, the player made no caption request to reuse and the track's own
+ *  address gave nothing, or the player's request was there but the tracks asked over it came back empty. */
+export type SubsMissing = 'no_player' | 'no_tracks' | 'no_url' | 'fetch_failed';
+/** The page as it is sent: PageIn and, while the server does not list it, why it has no captions. */
+export type PageSent = PageData & { subs_missing?: SubsMissing };
+/** What was collected; via: where the captions came from (the journal). */
+export interface Collected {
+  page: PageSent;
+  via?: 'player' | 'base_url' | 'button';
+}
+
+/** The player of the page's video with what it tells, read through the page's own object (Firefox: behind the
+ *  content script's view of it). A short on a computer has a player of its own (#shorts-player), while
+ *  #movie_player keeps the video watched before; on m.youtube.com #movie_player is the short's. */
+function player(): { api: PlayerApi; data: PlayerData } | null {
+  const id = pageVideoId(location);
+  for (const name of ['shorts-player', 'movie_player']) {
+    const el = document.getElementById(name) as PlayerElement | null;
+    const api = el && (el.wrappedJSObject || el);
+    const data = readPlayer(api);
+    if (api && data && data.videoDetails.videoId === id) return { api, data };
+  }
+  return null;
 }
 
 const pause = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -100,6 +129,64 @@ async function json3At(url: string): Promise<Json3 | null> {
   }
 }
 
+const ASK_MS = 8000; // how long the player is given to ask for captions once they are switched on
+
+/** The player's own timedtext request for the video: it carries the player's PO token (pot), without which
+ *  YouTube answers a web page's timedtext with nothing. One made before is taken; else `ask` makes the player ask
+ *  (captions on) and the request is watched for (YouTube clears the resource-timing buffer, an observer sees
+ *  entries as they are added). '' when none came. */
+async function ownRequest(videoId: string, ask: (() => Promise<() => void>) | null): Promise<string> {
+  const ours = (u: string): boolean => u.includes('/api/timedtext') && u.includes('pot=') && u.includes('v=' + videoId);
+  let url = performance.getEntriesByType('resource').map((e) => e.name).filter(ours).pop() || '';
+  if (url || !ask) return url;
+  const obs = new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) if (ours(e.name)) url = e.name;
+  });
+  obs.observe({ type: 'resource' });
+  let back = (): void => {};
+  try {
+    back = await ask();
+    for (let waited = 0; !url && waited < ASK_MS; waited += 200) await pause(200);
+  } finally {
+    obs.disconnect();
+    back(); // the viewer's captions as they were
+  }
+  return url;
+}
+
+/** Captions of the track on through the player's API (setOption: every player tried on www and m.youtube.com in
+ *  2026-11 asked for the track at once; m.youtube.com's toggleSubtitlesOn did nothing for a track of YouTube's
+ *  recognition), off first when they were on, so that the player asks anew. -> what puts the viewer's captions
+ *  back as they were: the track they had, or none */
+async function captionsOn(p: PlayerApi, track: { languageCode: string; kind?: string }): Promise<() => void> {
+  const set = (value: object): void =>
+    p.setOption!('captions', 'track', typeof cloneInto === 'function' ? cloneInto(value, window) : value);
+  const now = p.getOption!('captions', 'track') as { languageCode?: string } | null | undefined;
+  const wasOn = p.isSubtitlesOn ? !!p.isSubtitlesOn() : !!(now && now.languageCode);
+  const had = (wasOn && now ? JSON.parse(JSON.stringify(now)) : {}) as object;
+  if (wasOn) {
+    set({});
+    await pause(150);
+  }
+  set(track);
+  return () => set(had);
+}
+
+/** Captions on with the player's CC button (a computer's player without the API): pressed twice when they were
+ *  on. -> what presses it back */
+async function pressCC(btn: HTMLElement): Promise<() => void> {
+  const on = (): boolean => btn.getAttribute('aria-pressed') === 'true';
+  const wasOn = on();
+  if (wasOn) {
+    btn.click();
+    await pause(150);
+  }
+  btn.click();
+  return () => {
+    if (on() !== wasOn) btn.click();
+  };
+}
+
 const TRACKS_ROOM = 4_500_000; // the server takes 5 MB of caption files in one page, by its own count (weight)
 
 /** How much of the server's limit a caption file takes: its JSON as the server writes it, where a letter outside
@@ -109,8 +196,8 @@ export function weight(json3: Json3): number {
   return text.length + 5 * text.replace(/[\x00-\x7f]+/g, '').length;
 }
 
-/** The address of a track's json3: the player's own timedtext request (it carries the player's token) with the
- *  language, the kind and the translation changed. */
+/** The address of a track's json3: a timedtext address (the player's own request, which carries its token, or a
+ *  track's baseUrl) with the language, the kind and the translation changed. */
 export function trackUrl(own: string, track: WantedTrack): string {
   const url = new URL(own);
   url.searchParams.set('fmt', 'json3');
@@ -128,7 +215,7 @@ export function playerTrack(own: string): WantedTrack {
   return { lang: q.get('lang') || '', kind: q.get('kind') === 'asr' ? 'asr' : 'manual' };
 }
 
-/** The wanted tracks, fetched together over the player's own request `own`; one that cannot be had is left out,
+/** The wanted tracks, fetched together over the timedtext address `own`; one that cannot be had is left out,
  *  and so is one that no longer fits in `room` (weight) after those before it. */
 export async function moreTracks(own: string, wanted: WantedTrack[], get: (url: string) => Promise<Json3 | null>, room: number): Promise<PageTrack[]> {
   const files = await Promise.all(wanted.map((w) => get(trackUrl(own, w)).catch(() => null)));
@@ -141,16 +228,35 @@ export async function moreTracks(own: string, wanted: WantedTrack[], get: (url: 
   return tracks;
 }
 
-/** Page data for the server: metadata and the caption track as raw json3. timedtext needs the player's PO token,
- *  so captions are switched on for a moment, the player's own request (with pot) is reused for the chosen track,
- *  and CC is put back as it was. Null when the page has no video data. */
-export async function collectPage(): Promise<PageData | null> {
-  const pr = playerResponse();
-  const vd = pr && pr.videoDetails;
-  if (!pr || !vd || !vd.videoId) return null;
+/** The main track over a timedtext address (the player's own request, or a track's baseUrl), never YouTube's
+ *  translation (tlang: the player asks for one for a viewer who listens to a dub or chose translated captions, and
+ *  the words would be in that language under the track's own label). Over the player's request the token may be
+ *  tied to the track the player chose: then that one, in its own language. */
+async function mainTrack(url: string, pick: { lang: string; subs: 'manual' | 'asr' }, own: boolean):
+  Promise<{ json3: Json3; lang: string; subs: 'manual' | 'asr' } | null> {
+  const json3 = await json3At(trackUrl(url, { lang: pick.lang, kind: pick.subs }));
+  if (json3) return { json3, ...pick };
+  if (!own) return null;
+  const theirs = playerTrack(url);
+  const again = theirs.lang ? await json3At(trackUrl(url, theirs)) : null;
+  return again && { json3: again, lang: theirs.lang, subs: theirs.kind };
+}
+
+/** Page data for the server: metadata, the caption track as raw json3 and more tracks, or why there are none
+ *  (subs_missing). The captions are asked for over the player's own timedtext request (its PO token): one made
+ *  before, else one the player makes when the track is switched on through its API for a moment (www and
+ *  m.youtube.com, no button pressed); else over the track's own address (baseUrl: YouTube answers it with nothing
+ *  without a token, as far as seen in 2026-11, but a player may not need one); else, on a player without the API,
+ *  CC is pressed for a moment. */
+export async function collectPage(): Promise<Collected> {
+  const found = player();
+  const videoId = pageVideoId(location);
+  if (!found) return { page: { video_id: videoId, subs: null, subs_missing: 'no_player' } };
+  const { api, data: pr } = found;
+  const vd = pr.videoDetails;
   const cr = pr.captions.playerCaptionsTracklistRenderer;
   const lang = originalLang(pr.streamingData.adaptiveFormats, cr.audioTracks);
-  const page: PageData = {
+  const page: PageSent = {
     video_id: vd.videoId,
     title: (vd.title || '').slice(0, 500),
     duration: Number(vd.lengthSeconds) || null,
@@ -160,50 +266,35 @@ export async function collectPage(): Promise<PageData | null> {
     caption_tracks: listed(cr.captionTracks), // every track the page has, whichever of them are sent
   };
   const pick = pickCaption(originalCaptions(cr.captionTracks, cr.audioTracks), lang);
-  if (!pick) return page;
-  const btn = document.querySelector<HTMLElement>('#movie_player .ytp-subtitles-button');
-  const wasOn = !!btn && btn.getAttribute('aria-pressed') === 'true';
-  const ours = (u: string): boolean => u.includes('/api/timedtext') && u.includes('pot=') && u.includes('v=' + vd.videoId);
-  // YouTube clears the resource-timing buffer, so watch new requests with an observer (it sees entries as they
-  // are added) and make the player request the track now: CC on (or off and on again when it was already on).
-  let url = performance.getEntriesByType('resource').map((e) => e.name).filter(ours).pop();
-  const obs = new PerformanceObserver((list) => {
-    for (const e of list.getEntries()) if (ours(e.name)) url = e.name;
-  });
-  obs.observe({ type: 'resource' });
-  try {
-    if (!url && btn) {
-      if (wasOn) {
-        btn.click();
-        await pause(150);
-      }
-      btn.click();
-    }
-    for (let i = 0; !url && i < 20; i++) await pause(400);
-  } finally {
-    obs.disconnect();
-    if (btn && (btn.getAttribute('aria-pressed') === 'true') !== wasOn) btn.click(); // CC back as it was
+  if (!pick) return { page: { ...page, subs_missing: 'no_tracks' } };
+  const wanted = { lang: pick.track.languageCode, subs: pick.subs };
+  const hasApi = typeof api.setOption === 'function' && typeof api.getOption === 'function';
+  const track = { languageCode: pick.track.languageCode, ...(pick.subs === 'asr' ? { kind: 'asr' } : {}) };
+  const btn = hasApi ? null : document.querySelector<HTMLElement>('#movie_player .ytp-subtitles-button');
+  let hadOwn = false; // a request of the player's was had: its token did not do
+  const ways: [NonNullable<Collected['via']>, () => Promise<string>][] = [
+    ['player', () => ownRequest(vd.videoId!, hasApi ? () => captionsOn(api, track) : null)], // or one it made before
+    ['base_url', async () => (pick.track.baseUrl ? new URL(pick.track.baseUrl, location.href).href : '')], // m.: relative
+    ['button', () => (btn ? ownRequest(vd.videoId!, () => pressCC(btn)) : Promise.resolve(''))],
+  ];
+  for (const [via, way] of ways) {
+    const url = await way();
+    if (!url) continue;
+    const own = via !== 'base_url';
+    hadOwn ||= own;
+    const main = await mainTrack(url, wanted, own);
+    if (!main) continue;
+    // besides the main track: the speech's own tracks, English and Ukrainian (extraTracks), as far as the server's
+    // limit goes
+    const tracks = await moreTracks(url, extraTracks(cr.captionTracks, { lang: main.lang, subs: main.subs }), json3At,
+      TRACKS_ROOM - weight(main.json3));
+    return { page: { ...page, subs: main.subs, subs_lang: main.lang, json3: main.json3, ...(tracks.length ? { tracks } : {}) }, via };
   }
-  if (!url) return page;
-  // never YouTube's translation (tlang): the player asks for one for a viewer who listens to a dub or chose
-  // translated captions, and the words would be in that language under the label of the track's own
-  let json3 = await json3At(trackUrl(url, { lang: pick.track.languageCode, kind: pick.subs }));
-  let used: { lang: string | null; subs: 'manual' | 'asr' } = { lang: pick.track.languageCode, subs: pick.subs };
-  if (!json3) {
-    // the token may be tied to the track the player chose: take that one, in its own language
-    const theirs = playerTrack(url);
-    json3 = await json3At(trackUrl(url, theirs));
-    used = { lang: theirs.lang || null, subs: theirs.kind };
-  }
-  if (!json3) return page;
-  // besides the main track: the speech's own tracks and English (extraTracks), as far as the server's limit goes
-  const tracks = await moreTracks(url, extraTracks(cr.captionTracks, used.lang ? { lang: used.lang, subs: used.subs } : null),
-    json3At, TRACKS_ROOM - weight(json3));
-  return { ...page, subs: used.subs, subs_lang: used.lang, json3, ...(tracks.length ? { tracks } : {}) };
+  return { page: { ...page, subs_missing: hadOwn ? 'fetch_failed' : 'no_url' } };
 }
 
 /** YouTube itself offers a Ukrainian audio track for this video (multi-language audio / dubbing). */
 export function hasUkrainianDub(): boolean {
-  const pr = playerResponse();
+  const pr = player()?.data;
   return !!pr && ukrainianDub(pr.streamingData.adaptiveFormats, pr.captions.playerCaptionsTracklistRenderer.audioTracks);
 }

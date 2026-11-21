@@ -1,42 +1,24 @@
-// The userscript's entry: picks the site's adapter, puts the settings, the server's API, the voice-over session
-// and the UI together, and follows the page (the buttons' place, navigation to another video).
-import { adapterFor } from './adapters/registry';
+// The userscript's entry: puts the settings, the server's API, the voice-over session and the UI together on a
+// YouTube page, and follows the page (the buttons' place, navigation to another video).
 import type { SiteAdapter } from './adapters/types';
+import { youtubeAdapter } from './adapters/youtube/index';
 import { ServerApi, type Voice } from './api/client';
 import { autoLink, onPanel, type LinkBox } from './core/autolink';
 import { Journal } from './core/journal';
 import { readyOffer } from './core/ready';
 import { VoiceoverSession } from './core/session';
 import { VERSION } from './meta';
-import { scriptManager } from './platform/gm';
+import { type Platform, scriptManager } from './platform/gm';
 import { SERVER, SettingsStore } from './settings/store';
 import { toast } from './ui/dom';
 import { DubQuestion } from './ui/dub';
-import { Previews } from './ui/preview';
 import { ReadyQuestion } from './ui/ready';
 import { Ui } from './ui/ui';
 
 const DUB_OK_MAX = 300;
 const TAKEN_MAX = 300;
 
-const platform = scriptManager;
-const store = new SettingsStore(platform);
-
-// The diagnostic journal is always kept (in memory, for «Копіювати журнал»); ?vxdebug=1 in a page's address, or
-// the setting, also writes it to the console as it grows (?vxdebug=0 stops that).
-const journal = new Journal(Date.now, (line) => {
-  if (store.current.debug) console.debug('VoxArbor UA', line);
-});
-const asked = new URLSearchParams(location.search).get('vxdebug');
-if ((asked === '1' || asked === '0') && store.current.debug !== (asked === '1')) {
-  store.current.debug = asked === '1';
-  store.save();
-}
-
-// A slider's changes are written once they settle: write what still waits when the page goes away.
-window.addEventListener('pagehide', () => store.flush());
-
-function wire(adapter: SiteAdapter): void {
+function wire(adapter: SiteAdapter, platform: Platform & { reload(): Promise<void> }, store: SettingsStore, journal: Journal): void {
   const S = store.current; // one object for the page's life: the UI changes it in place
   const server = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }), (line) => journal.mark(line));
   let unmount: (() => void) | null = null; // takes the buttons out of the page
@@ -105,8 +87,9 @@ function wire(adapter: SiteAdapter): void {
 
   // Another tab may have changed the settings, most of all connected the script (the panel's «Скрипт» page does it
   // in a tab of its own): they are taken when this tab is looked at again.
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', async () => {
     if (document.hidden) return;
+    await platform.reload(); // a manager that reads only in a promise: what the others wrote, read anew
     const fresh = store.refresh();
     if (fresh.includes('token')) reconnect();
     if (fresh.includes('voiceVolume')) session.voiceVolumeChanged();
@@ -121,7 +104,7 @@ function wire(adapter: SiteAdapter): void {
     const ok = platform.getValue<string[]>('ukDubOk', []);
     let dub = false;
     try {
-      dub = !!(url && adapter.ukrainianDub && !ok.includes(url) && adapter.ukrainianDub());
+      dub = !!(url && !ok.includes(url) && adapter.ukrainianDub());
     } catch (e) {
       console.warn('VoxArbor UA: the check for a Ukrainian track failed', e); // never block the voice-over because of it
     }
@@ -137,8 +120,7 @@ function wire(adapter: SiteAdapter): void {
 
   // A video that is ready in other voices (owner): offer them before it is voiced anew in the viewer's own. The
   // voice taken holds for this video only and is remembered ('' : «anew in my own»); the settings stay as they are.
-  const sample = new Previews({ api: server, site: adapter, audio: samples, onOriginal: () => {} }); // one: a new ▶ stops the sample before
-  const readyQuestion = new ReadyQuestion((path) => sample.playClip(path), () => sample.stopClip());
+  const readyQuestion = new ReadyQuestion((path) => ui.previews.playClip(path), () => ui.previews.stopClip());
   const taken = (): [string, string][] => platform.getValue<[string, string][]>('videoVoice', []);
   const kept = (url: string | null): string | undefined => taken().find(([u]) => u === url)?.[1];
   const take = (url: string, voice: string): void =>
@@ -151,9 +133,7 @@ function wire(adapter: SiteAdapter): void {
     const mine = ++asking;
     looking = url;
     ui.setState('busy', 'Запуск озвучки…');
-    // the video is opened on the server at once, while the server is asked what is ready (owner: one request after
-    // the other made the start slow); the voice-over that starts below takes that answer
-    session.prepare(before || null);
+    // the video is opened on the server only once the viewer has chosen (a viewer who cancels opens nothing)
     const offer = await readyOffer({ voiced: (u) => server.voiced(u), voices: () => ui.voices() }, url, S, before);
     if (mine !== asking) return; // the page went to another video meanwhile (the button there is not kept busy)
     looking = null;
@@ -194,7 +174,7 @@ function wire(adapter: SiteAdapter): void {
       return;
     }
     const buttons = ui.buttons();
-    if (buttons.some((b) => !b.isConnected) || (adapter.wantsRemount && adapter.wantsRemount())) {
+    if (buttons.some((b) => !b.isConnected) || adapter.wantsRemount()) {
       unmount = adapter.mountControls(buttons);
     }
   }
@@ -212,12 +192,31 @@ function wire(adapter: SiteAdapter): void {
   watch();
 }
 
-if (onPanel(location, SERVER)) {
-  const box = document.getElementById('script-link');
-  const S = store.current;
-  const api = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }));
-  if (box) void autoLink(box as unknown as LinkBox, { api, settings: S, saved: () => store.save() });
-} else {
-  const adapter = adapterFor(location);
-  if (adapter) wire(adapter);
+async function main(): Promise<void> {
+  const platform = await scriptManager();
+  if (!platform) return console.warn('VoxArbor UA: the script manager gives no GM_getValue/GM_xmlhttpRequest (nor GM.*)');
+  const store = new SettingsStore(platform);
+  if (onPanel(location, SERVER)) {
+    const box = document.getElementById('script-link');
+    const S = store.current;
+    const api = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }));
+    if (box) void autoLink(box as unknown as LinkBox, { api, settings: S, saved: () => store.save() });
+    return;
+  }
+  if (!youtubeAdapter.match(location)) return;
+  // The diagnostic journal is always kept (in memory, for «Копіювати журнал»); ?vxdebug=1 in a page's address, or
+  // the setting, also writes it to the console as it grows (?vxdebug=0 stops that).
+  const journal = new Journal(Date.now, (line) => {
+    if (store.current.debug) console.debug('VoxArbor UA', line);
+  });
+  const asked = new URLSearchParams(location.search).get('vxdebug');
+  if ((asked === '1' || asked === '0') && store.current.debug !== (asked === '1')) {
+    store.current.debug = asked === '1';
+    store.save();
+  }
+  // A slider's changes are written once they settle: write what still waits when the page goes away.
+  window.addEventListener('pagehide', () => store.flush());
+  wire(youtubeAdapter, platform, store, journal);
 }
+
+void main();

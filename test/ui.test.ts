@@ -50,7 +50,7 @@ function host(over: Partial<UiHost> = {}) {
       },
       deviceToken: async () => ({ token: 'vxa_new', login: 'user', name: 'Мій телефон' }),
     },
-    site: { getVideo: () => null, getPlayer: () => null },
+    site: { getVideo: () => null, getPlayer: () => null, panelAtTop: () => false },
     videoKey: () => null,
     audio: () => {
       throw new Error('no sound here');
@@ -513,7 +513,7 @@ test('a sample plays in place of the one before; stopped while it was on its way
   const waiting: (() => void)[] = [];
   const previews = new Previews({
     api: { bytes: () => new Promise<ArrayBuffer>((give) => waiting.push(() => give(new ArrayBuffer(1000)))) } as unknown as UiHost['api'],
-    site: { getVideo: () => null, getPlayer: () => null },
+    site: { getVideo: () => null, getPlayer: () => null, panelAtTop: () => false },
     audio: () => (contexts[0] as unknown as AudioContext | undefined) ?? new AudioContext(),
     onOriginal: () => {},
   });
@@ -631,7 +631,7 @@ test('a speaker\'s own words: the video goes to them and plays, the voice-over i
   const video = Object.assign(doc.createElement('video'), { currentTime: 50, paused: true,
     play() { this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; } });
   const told: string[] = [];
-  const previews = new Previews({ api: {} as UiHost['api'], site: { getVideo: () => video as unknown as HTMLVideoElement, getPlayer: () => null },
+  const previews = new Previews({ api: {} as UiHost['api'], site: { getVideo: () => video as unknown as HTMLVideoElement, getPlayer: () => null, panelAtTop: () => false },
     audio: () => { throw new Error('no sound here'); }, onOriginal: (on) => told.push('original ' + on) });
   previews.playOriginal({ start: 120, end: 125 });
   assert.deepEqual([told, video.currentTime, video.paused], [['original true'], 120, false]);

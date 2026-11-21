@@ -30,6 +30,7 @@ export function onPanel(where: { origin: string; pathname: string }, server: str
 }
 
 function why(e: unknown): string {
+  if (e instanceof ApiError && e.said) return e.said; // the server's own words, when it gives them
   if (e instanceof ApiError && e.status === 400 && e.body.includes('expired_token')) return 'Код застарів.';
   if (e instanceof ApiError && e.status === 0) return 'Немає зв\'язку із сервером.';
   return 'Сервер відмовив.';

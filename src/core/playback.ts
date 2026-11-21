@@ -46,7 +46,7 @@ export class Playback {
     const dt = Math.min(DUCK_TIME, (now - s.lastTick) / 1000);
     s.lastTick = now;
     // an ad plays in the video's place, or a speaker's own words are listened to: the voice-over stays out
-    const ad = s.original || (site.inAd ? site.inAd(v) : false);
+    const ad = s.original || site.inAd(v);
     if (ad && s.sources.length) this.stopSources(s);
     if (!v.seeking && !ad) {
       for (const seg of due(s.list, t, !v.paused, s.done, (x) => s.bufs.get(x.i)?.duration)) {
@@ -107,7 +107,7 @@ export class Playback {
     const t = v.currentTime;
     const first = firstToHear(s.list, t); // a phrase that is nearly over would not be joined: not waited for either
     if (s.status !== 'ready' || !first || first.start - t > PREP_NEAR || s.bufs.get(first.i)) return;
-    if (this.host.site.inAd && this.host.site.inAd(v)) return;
+    if (this.host.site.inAd(v)) return;
     s.prep = { i: first.i, since: Date.now() };
     if (!v.paused) {
       s.held = true;

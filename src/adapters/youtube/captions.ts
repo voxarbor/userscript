@@ -18,6 +18,8 @@ export interface CaptionTrack {
   kind?: string;
   /** As the player names it: «English (auto-generated)». */
   name?: string;
+  /** The track's own timedtext address (its signature does not cover lang, kind or fmt). */
+  baseUrl?: string;
 }
 
 /** A caption track to ask YouTube for. translatedFrom: YouTube's machine translation into `lang` of its own

@@ -45,11 +45,12 @@ export async function signIn(host: SignInHost, name: string, shown: (code: strin
       return await host.api.deviceToken({ device_code: told.device_code });
     } catch (e) {
       const error = why(e);
+      const said = e instanceof ApiError ? e.said : null; // the server's own words, when it gives them
       if (error === 'slow_down') gap += SLOWER_S;
-      else if (error === 'access_denied') throw new Error('На сайті відмовлено');
-      else if (error === 'expired_token') throw new Error(EXPIRED);
+      else if (error === 'access_denied') throw new Error(said || 'На сайті відмовлено');
+      else if (error === 'expired_token') throw new Error(said || EXPIRED);
       else if (error !== 'authorization_pending' && !(e instanceof ApiError && e.status === 0)) {
-        throw new Error('Не вдалося: ' + (e as Error).message);
+        throw new Error(said || 'Не вдалося: ' + (e as Error).message);
       }
     }
   }

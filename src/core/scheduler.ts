@@ -235,7 +235,7 @@ export function holdStep(
   return enough ? 'release' : null;
 }
 
-/** A phrase too far from the position `from` to keep: it ended over 30 s before it or starts over 120 s after. */
+/** A phrase too far from the position `from` to keep: it ended over KEEP_BEHIND s before it or starts over KEEP_AHEAD s after. */
 export function outOfReach(seg: Span, from: number): boolean {
   return seg.end < from - KEEP_BEHIND || seg.start > from + KEEP_AHEAD;
 }

@@ -6,7 +6,7 @@ import { deviceName, signIn } from '../core/signin';
 import { el, overPage, shield } from './dom';
 import { fmtDur, groupVoices, voicedMark } from './format';
 import type { UiHost } from './host';
-import { Previews } from './preview';
+import type { Previews } from './preview';
 import { PANEL_CSS } from './styles';
 import { card, grid, heading, note, playBtn, voiceSelect } from './widgets';
 
@@ -19,17 +19,15 @@ export class SettingsWindow {
   private signing = false; // «Підключити» waits for the site: one sign-in at a time, whether the window stays open or not
   private signNote: string | null = null; // what the sign-in says now (its code, or why it failed); null: nothing
   private connection: HTMLElement | null = null; // the box of the connection on «Основні», as shown last
-  private readonly previews: Previews;
 
   /** voices(): every voice of the server. videoControls(): the video's settings as controls (the quick panel
-   *  shows the same). */
+   *  shows the same). previews: the page's player of samples. */
   constructor(
     private readonly host: UiHost,
     private readonly voices: () => Promise<Voice[]>,
     private readonly videoControls: () => HTMLElement[],
-  ) {
-    this.previews = new Previews(host);
-  }
+    private readonly previews: Previews,
+  ) {}
 
   /** Opens the window on the tab, or turns the open window to it. */
   open(tab: TabId): void {

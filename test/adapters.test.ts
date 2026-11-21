@@ -1,15 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { adapterFor } from '../src/adapters/registry';
+import { youtubeAdapter } from '../src/adapters/youtube/index';
 
-const at = (hostname: string) => adapterFor({ hostname } as Location);
+const at = (hostname: string) => youtubeAdapter.match({ hostname } as Location);
 
-test('YouTube pages have the YouTube adapter, other sites none', () => {
-  for (const host of ['www.youtube.com', 'm.youtube.com', 'youtube.com', 'music.youtube.com']) {
-    assert.equal(at(host)?.name, 'youtube', host);
-  }
-  for (const host of ['notyoutube.com', 'youtube.com.example.org', 'example.org']) {
-    assert.equal(at(host), undefined, host);
-  }
+test('YouTube\'s pages are the adapter\'s, other sites not', () => {
+  for (const host of ['www.youtube.com', 'm.youtube.com', 'youtube.com', 'music.youtube.com']) assert.equal(at(host), true, host);
+  for (const host of ['notyoutube.com', 'youtube.com.example.org', 'example.org']) assert.equal(at(host), false, host);
 });

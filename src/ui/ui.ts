@@ -5,6 +5,7 @@ import type { SessionState } from '../core/types';
 import { mainButton, showState, tuneButton } from './buttons';
 import { videoControls } from './controls';
 import type { UiHost } from './host';
+import { Previews } from './preview';
 import { QuickPanel } from './quick';
 import { SettingsWindow } from './settings';
 
@@ -12,6 +13,8 @@ export class Ui {
   private made: { main: HTMLButtonElement; tune: HTMLButtonElement } | null = null;
   private readonly quick: QuickPanel;
   private readonly settings: SettingsWindow;
+  /** Samples and a speaker's own words: one player for the whole page (a new ▶ stops the one before). */
+  readonly previews: Previews;
   // All voices change rarely: one request per connection (they are the server's answer to that token: another
   // account may have other voices), retried after a failure.
   private voicesReq: { token: string; list: Promise<Voice[]> } | null = null;
@@ -23,7 +26,8 @@ export class Ui {
       this.settings.open('voices');
     });
     this.quick = new QuickPanel(host.site, controls, () => this.buttons()[1]);
-    this.settings = new SettingsWindow(host, voices, controls);
+    this.previews = new Previews(host);
+    this.settings = new SettingsWindow(host, voices, controls, this.previews);
   }
 
   /** The buttons for the player, made when first asked for: the voice-over switch (idle), then «tune». */

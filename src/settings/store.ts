@@ -34,7 +34,7 @@ export const DEFAULTS: Settings = {
   token: '',
   account: '',
   voice: 'Speaker_53', // holos "history"
-  origVolume: 0.1, // -20 dB; 0.2 and then 0.12 were too loud for the owner
+  origVolume: 0.1, // -20 dB
   voiceVolume: 1,
   waitForVoice: true, // owner: pause rather than play the original unvoiced
   duckAlways: true,
@@ -44,12 +44,9 @@ export const DEFAULTS: Settings = {
   debug: false,
 };
 
-/** Saved settings over defaults. 'male' was the 0.1.x default, so it is migrated to the new one. */
+/** Saved settings over defaults. */
 export function loadSettings(saved?: Partial<Settings> | null): Settings {
-  const s: Settings = Object.assign({}, DEFAULTS, saved);
-  if (s.voice === 'male') s.voice = DEFAULTS.voice;
-  if (s.origVolume === 0.2 || s.origVolume === 0.12) s.origVolume = DEFAULTS.origVolume; // older defaults
-  return s;
+  return Object.assign({}, DEFAULTS, saved);
 }
 
 /** The user's settings as the script manager keeps them. `current` is changed in place, then saved. Every tab of

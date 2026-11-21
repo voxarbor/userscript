@@ -11,17 +11,9 @@ test('defaults: voice 53, original at 10%, full voice volume, wait for voice', (
   assert.equal(DEFAULTS.mode, ''); // the speakers' voices as the server has them for the video
 });
 
-test('loadSettings: old default voice "male" becomes Speaker_53, chosen voices stay', () => {
-  assert.equal(loadSettings({ voice: 'male', token: 't' }).voice, 'Speaker_53');
-  assert.equal(loadSettings({ voice: 'male', token: 't' }).token, 't');
-  assert.equal(loadSettings({ voice: 'Speaker_30' }).voice, 'Speaker_30');
+test('loadSettings: saved settings over the defaults', () => {
+  assert.deepEqual([loadSettings({ voice: 'Speaker_30', token: 't' }).voice, loadSettings({ token: 't' }).token], ['Speaker_30', 't']);
   assert.equal(loadSettings({}).voice, 'Speaker_53');
-});
-
-test('loadSettings: old 0.2 original volume moves to the new default, custom values stay', () => {
-  assert.equal(loadSettings({ origVolume: 0.2 }).origVolume, 0.1);
-  assert.equal(loadSettings({ origVolume: 0.12 }).origVolume, 0.1);
-  assert.equal(loadSettings({ origVolume: 0.3 }).origVolume, 0.3);
 });
 
 test('defaults: original stays ducked for the whole session', () => {

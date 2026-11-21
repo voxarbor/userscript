@@ -15,6 +15,12 @@ const FIELDS: [string, string][] = [
   ['grant', 'GM_registerMenuCommand'],
   ['grant', 'GM_openInTab'],
   ['grant', 'GM_setClipboard'],
+  // the same, promise-based: for the managers without GM_* (Greasemonkey 4, Userscripts on iOS), platform/gm.ts
+  ['grant', 'GM.getValue'],
+  ['grant', 'GM.setValue'],
+  ['grant', 'GM.xmlHttpRequest'],
+  ['grant', 'GM.openInTab'],
+  ['grant', 'GM.setClipboard'],
   ['connect', '*'],
   ['run-at', 'document-idle'],
   ['noframes', ''],

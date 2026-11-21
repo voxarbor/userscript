@@ -11,11 +11,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('the store loads what the script manager keeps, over the defaults and through the migrations', () => {
-  const store = new SettingsStore(new MemoryPlatform({ settings: { voice: 'male', token: 't', origVolume: 0.2 } }));
-  assert.equal(store.current.voice, DEFAULTS.voice); // 'male' was the 0.1.x default
-  assert.equal(store.current.origVolume, DEFAULTS.origVolume); // an older default
-  assert.equal(store.current.token, 't');
+test('the store loads what the script manager keeps, over the defaults', () => {
+  const store = new SettingsStore(new MemoryPlatform({ settings: { voice: 'Speaker_30', token: 't' } }));
+  assert.deepEqual([store.current.voice, store.current.origVolume, store.current.token], ['Speaker_30', DEFAULTS.origVolume, 't']);
   assert.equal(new SettingsStore(new MemoryPlatform()).current.token, '');
 });
 

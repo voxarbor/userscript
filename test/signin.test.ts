@@ -65,6 +65,8 @@ test('a lost answer is polled again; a refusal, an expired code and a refused re
   assert.equal(await failed([wait('access_denied')]), 'На сайті відмовлено');
   assert.equal(await failed([wait('expired_token')]), 'Код застарів: натисніть «Увійти» ще раз');
   assert.equal(await failed([new ApiError(429, 'HTTP 429')]), 'Не вдалося: HTTP 429');
+  // the server's own words (message, proposed) when it gives them
+  assert.equal(await failed([new ApiError(400, 'HTTP 400', '{"error":"access_denied","message":"Вхід скасовано на сайті"}')]), 'Вхід скасовано на сайті');
   // the code's time runs out while nobody answers: 20 s, polls every 5 s
   assert.equal(await failed(Array(4).fill(wait('authorization_pending'))), 'Код застарів: натисніть «Увійти» ще раз');
 });

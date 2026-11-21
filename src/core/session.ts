@@ -3,7 +3,7 @@
 // Three parts work on a run: the poller asks the server, the loader fetches the audio, the playback sounds it.
 import type { ToastAction } from '../ui/dom';
 import type { SiteAdapter } from '../adapters/types';
-import type { Segment, ServerApi, VideoOut } from '../api/client';
+import type { Segment, ServerApi } from '../api/client';
 import type { Settings } from '../settings/store';
 import { Loader } from './loader';
 import { Playback } from './playback';
@@ -12,8 +12,6 @@ import { reusable } from './scheduler';
 import type { SessionState } from './types';
 
 const PARK_MS = 60000; // how long a switched-off session (its segments and decoded audio) is kept
-const EARLY_MS = 5000; // how long an opening asked for ahead of the switching on (prepare) may be used
-const EARLY_NEAR = 5; // s: ... and how far the video may have moved from where it was asked for
 
 /** What the session needs of the rest of the script. */
 export interface SessionHost {
@@ -34,17 +32,6 @@ export interface SessionHost {
   /** The server refused the script's token and the voice-over was switched off. -> another tab has connected
    *  the script since, and the voice-over was switched on again with that token: nothing to tell the person */
   tokenRefused(): boolean;
-}
-
-/** The video opened on the server ahead of the switching on: asked for at `from` (video seconds) at the time
- *  `at`, for the voices `mode` (voiceMode); its answer comes, or fails, later. */
-export interface Early {
-  url: string;
-  only: string | null;
-  mode: string;
-  from: number;
-  at: number;
-  answer: Promise<VideoOut>;
 }
 
 /** A phrase that sounds or is scheduled to: its source, its own gain and its place in the video (seconds). */
@@ -71,6 +58,12 @@ export class Run {
   error: string | null = null;
   /** Why nothing new is made for this person (they hear what is ready), in the server's words; null: it is. */
   refused: string | null = null;
+  /** The server's words for the state of the video (status_text, proposed); null: the percentage is shown. */
+  statusText: string | null = null;
+  /** The server keeps the video's voice for this person (voice_kept): they are not offered to switch it. */
+  keep = false;
+  /** Why the voices asked for were not taken was told (once a run). */
+  keptTold = false;
   /** The voice the video is voiced in on the server, for everybody; null: not told yet. */
   videoVoice: string | null = null;
   /** The person was offered to voice it in theirs (once a run, unless they took the offer). */
@@ -80,8 +73,6 @@ export class Run {
   /** The server's end of the unbroken voiced run; null when it belongs to an older position or voice. */
   voicedUntil: number | null = null;
   pageSent = false;
-  /** The opening asked for before the run was made; the first poll takes its answer in place of asking. */
-  early: Early | null = null;
   /** The last request told the server that the viewer does not watch (paused). */
   toldPaused = false;
   segs = new Map<number, Segment>();
@@ -162,7 +153,6 @@ export class VoiceoverSession {
   private out: { ctx: AudioContext; gain: GainNode } | null = null;
   private run: Run | null = null;
   private parked: Parked | null = null;
-  private early: Early | null = null;
   private readonly playback: Playback;
   private readonly loader: Loader;
   private readonly poller: Poller;
@@ -193,33 +183,10 @@ export class VoiceoverSession {
     return !!s && (this.host.site.getVideoUrl() !== s.url || !s.video.isConnected);
   }
 
-  /** The page's one audio context, made at the first use. */
-  audio(): AudioContext {
-    return this.output().ctx;
-  }
-
-  /** Opens the video on the server now, ahead of the switching on (the viewer may be asked a question first, and
-   *  the server is asked what is ready meanwhile): a start() within a few seconds, for the same video and voices,
-   *  takes this answer in place of asking again. Nothing sounds and nothing is switched by it. */
-  prepare(only: string | null = null): void {
-    const { settings: S, site } = this.host;
-    const video = site.getVideo();
-    const url = site.getVideoUrl();
-    if (this.run || !video || !url) return;
-    const voices = voicesOf({ only }, S);
-    const mode = modeOf(voices);
-    if (reusable(this.parked, url, mode, Date.now())) return; // what was prepared for it is still kept
-    const { from, answer } = this.poller.open(url, video, voices, !!only, true);
-    answer.catch(() => {}); // start() may never come; when it does, its poll hears of the failure
-    this.early = { url, only, mode, from, at: Date.now(), answer };
-  }
-
   /** only: a voice for this video alone, in place of the voices of the settings. */
   start(only: string | null = null): void {
     this.stop(); // never two runs at once: the one before would go on sounding with nobody to stop it
     const { settings: S, site } = this.host;
-    const early = this.early;
-    this.early = null;
     const video = site.getVideo();
     const url = site.getVideoUrl();
     if (!video || !url) return this.host.toast('Відео не знайдено');
@@ -233,12 +200,11 @@ export class VoiceoverSession {
       // windowEnd stays null: one segments request refreshes the window, audio already decoded is not fetched again
       const { key, voice, status, progress, segs, list, bufs } = this.parked;
       Object.assign(s, { key, mode: voice, status, progress, segs, list, bufs });
-    } else if (early && early.url === url && early.only === only && early.mode === mode &&
-      Date.now() - early.at < EARLY_MS && Math.abs(video.currentTime - early.from) < EARLY_NEAR) s.early = early;
+    }
     this.parked = null;
     const note = (what: string): void => this.host.note(`video: ${what} at ${video.currentTime.toFixed(2)}`);
     this.host.note(`on: ${url} at ${video.currentTime.toFixed(2)}, ${video.paused ? 'paused' : 'playing'}, voices ${mode}` +
-      (s.key ? ', what was prepared before is used' : s.early ? ', opened ahead' : ''));
+      (s.key ? ', what was prepared before is used' : ''));
     const on = (ev: string, fn: () => void): void => video.addEventListener(ev, fn, { signal: s.ac.signal });
     on('play', () => {
       note('play');

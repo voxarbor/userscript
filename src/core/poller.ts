@@ -6,13 +6,13 @@ import type { Loader } from './loader';
 import type { Playback } from './playback';
 import { WINDOW_S } from '../api/client';
 import { bufferedAhead, needFetch, outOfReach, preparedPercent, quietOutage, quietRetry, voiceMode, windowIncomplete } from './scheduler';
+import { type Proposed, said } from './said';
 import type { Run, SessionHost } from './session';
 
 const POLL_MS = 3000; // while the video is not ready
 const IDLE_MS = 1000; // when ready: only check the window edge
 const HEARTBEAT_MS = 60000; // a segments GET at least once a minute (owner): the server's idle cut is longer than that
 const RETRY_MS = 10000; // server unreachable
-const OPEN_WINDOW_S = 150; // the phrases an opening comes with (the server's OPEN_WINDOW, 150 s since 0.10.4)
 const HELD_POLL_MS = 1000; // while the video waits for the voice-over: release it as soon as enough is voiced
 
 /** Who voices a video: the voice, how the speakers are voiced and the lead voices. */
@@ -28,8 +28,8 @@ export const modeOf = (v: Voices): string => voiceMode(v.voice, v.mode, v.leadMa
 /** Where the video is, as the server is told: seconds, to a hundredth. */
 const place = (video: HTMLVideoElement): number => Math.round(Math.max(0, video.currentTime) * 100) / 100;
 
-/** The server gave the video up: asking again would not help. */
-const fatal = (message: string | null): Error => Object.assign(new Error(message || 'помилка обробки'), { fatal: true });
+/** The server gave the video up: asking again would not help. message: its words (safe text, said()). */
+const fatal = (message: string | null): Error => Object.assign(new Error(said(message) || 'помилка обробки'), { fatal: true });
 
 export class Poller {
   /** stop(): switches the voice-over off (a refused token, a video the server gave up). */
@@ -51,7 +51,7 @@ export class Poller {
   /** Opens the video on the server for this viewer, at the place the video is at; change: the voices are switched
    *  for everybody. held: the viewer waits to watch, though the video is paused. -> the place asked for and the
    *  answer, which carries the phrases from that place when the server knows how (window). */
-  open(url: string, video: HTMLVideoElement, voices: Voices, change: boolean, held: boolean): { from: number; answer: Promise<VideoOut> } {
+  private open(url: string, video: HTMLVideoElement, voices: Voices, change: boolean, held: boolean): { from: number; answer: Promise<VideoOut> } {
     const from = place(video);
     const body: VideoIn = { url, voice: voices.voice, ...(voices.mode ? { mode: voices.mode } : {}),
       lead_male: voices.leadMale || '', lead_female: voices.leadFemale || '', page_support: true, switch: change, from,
@@ -74,13 +74,10 @@ export class Poller {
       let got = false; // the phrases came with the opening
       if (!s.key || s.mode !== mode || s.wantSwitch) {
         const change = !!s.key || !!s.only || s.wantSwitch;
-        // asked ahead of the switching on (VoiceoverSession.prepare), for these very voices: not asked again
-        const early = s.early && !s.key && !s.wantSwitch && s.early.mode === mode ? s.early : null;
-        s.early = null;
-        const gen = early ? 0 : s.gen;
+        const gen = s.gen;
         const round = s.voices;
-        s.toldPaused = !early && s.video.paused && !s.held;
-        const { from, answer } = early || this.open(s.url, s.video, voices, change, s.held);
+        s.toldPaused = s.video.paused && !s.held;
+        const { from, answer } = this.open(s.url, s.video, voices, change, s.held);
         const r = await answer;
         if (s.stopped) return; // switched off meanwhile: nothing more is asked or collected for it
         s.wantSwitch = false;
@@ -89,16 +86,20 @@ export class Poller {
         s.mode = mode;
         s.key = r.video_key;
         s.status = r.status;
-        s.refused = r.refused ?? null;
-        this.host.note(`opened: ${r.status ?? 'nothing to read'}, voice ${r.voice ?? '—'}` + (r.refused ? `, refused: ${r.refused}` : '') +
-          (r.window ? '' : ', no phrases with it (a server before 0.10): they are asked for'));
+        s.refused = said(r.refused);
+        this.host.note(`opened: ${r.status ?? 'nothing to read'}, voice ${r.voice ?? '—'}` + (r.refused ? `, refused: ${r.refused}` : ''));
+        // the voices asked for were not taken: the server says why (a voice no more, a client's mode, a video kept)
+        const kept = [r.voice_refused, r.mode_refused, r.voice_kept].map(said).filter((x) => x).join(' ');
+        if (kept && !s.keptTold) this.host.toast(kept);
+        s.keptTold ||= !!kept;
+        s.keep = !!r.voice_kept;
         if (r.status === 'error') throw fatal(r.error);
         if (r.status === null && s.refused) throw fatal(s.refused); // nothing to read, and nothing is made for them
         this.offer(s);
         // the voices changed meanwhile: these phrases are the old ones', the next poll opens the video anew
         if (r.window && round === s.voices && mode === modeOf(voicesOf(s, S))) {
           s.lastGet = Date.now();
-          this.take(s, r.window, from, gen, OPEN_WINDOW_S);
+          this.take(s, r.window, from, gen); // the opening's window is as long as a segments one (the server's OPEN_WINDOW)
           got = true;
         }
       }
@@ -115,23 +116,25 @@ export class Poller {
       if (!s.stopped && !s.held) {
         // owner: the tooltip shows just how much of the video is prepared
         const pct = preparedPercent(s.status, s.progress);
-        this.host.setState(s.status === 'ready' ? 'on' : 'busy', s.error || s.refused || pct + '%');
+        this.host.setState(s.status === 'ready' ? 'on' : 'busy', s.error || s.refused || s.statusText || pct + '%');
       }
     } catch (thrown) {
-      const e = thrown as Error & { status?: number; fatal?: boolean };
+      // the person reads the server's own words for a refusal when it gives them (ApiError.said), else a few here
+      const e = thrown as Error & { status?: number; fatal?: boolean; said?: string | null };
       s.busy = false;
       if (s.stopped) return;
       if (e.status === 401) {
         this.stop();
         if (this.host.tokenRefused()) return;
-        this.host.toast('Скрипт не підключено: натисніть «Підключити»');
+        this.host.toast(e.said || 'Скрипт не підключено: натисніть «Підключити»');
         return this.host.openSettings();
       }
       const wait = e.status === 429 || e.status === 408; // the server (or a proxy before it) asks to come later
       if (e.fatal || (!wait && e.status !== undefined && e.status >= 400 && e.status < 500)) {
         this.stop();
-        this.host.setState('error', e.message);
-        return this.host.toast(e.message);
+        const words = e.fatal ? e.message : e.said || `Сервер відмовив (${e.message})`;
+        this.host.setState('error', words);
+        return this.host.toast(words);
       }
       s.downSince ??= Date.now();
       const ahead = this.ahead(s);
@@ -144,7 +147,7 @@ export class Poller {
       }
       s.offline = true;
       this.playback.release(s);
-      this.host.setState('offline', `Сервер озвучки ${wait ? 'зайнятий' : 'недоступний'}, повторю за 10 с`);
+      this.host.setState('offline', e.said || `Сервер озвучки ${wait ? 'зайнятий' : 'недоступний'}, повторю за 10 с`);
       delay = RETRY_MS;
     }
     s.busy = false;
@@ -177,16 +180,17 @@ export class Poller {
     const r = await this.host.api.segments(key, from, paused);
     // the voices changed meanwhile (the settings, or one speaker's voice on the server): the next poll refetches
     if (s.stopped || voices !== s.voices || mode !== modeOf(voicesOf(s, this.host.settings))) return;
-    this.take(s, r, from, gen, WINDOW_S);
+    this.take(s, r, from, gen);
   }
 
-  /** The phrases of the window asked for at `from` (span s long), in the seek generation `gen`, become the run's. */
-  private take(s: Run, r: SegmentsOut, from: number, gen: number, span: number): void {
+  /** The phrases of the window asked for at `from`, in the seek generation `gen`, become the run's. */
+  private take(s: Run, r: SegmentsOut, from: number, gen: number): void {
     const before = `${s.status}/${s.list.length}/${s.list.filter((x) => x.audio).length}`;
     s.status = r.status;
     s.progress = r.progress;
-    s.error = r.error; // with a non-error status: a transient local-ai problem, shown but not fatal
-    s.refused = r.refused ?? null;
+    s.error = said(r.error); // with a non-error status: a transient local-ai problem, shown but not fatal
+    s.refused = said(r.refused);
+    s.statusText = said((r as Proposed).status_text);
     s.videoVoice = r.voice ?? s.videoVoice;
     this.offer(s);
     s.voicedUntil = r.voiced_until;
@@ -205,7 +209,7 @@ export class Poller {
       }
     }
     s.list = [...s.segs.values()].sort((a, b) => a.start - b.start);
-    if (gen === s.gen) s.windowEnd = from + span;
+    if (gen === s.gen) s.windowEnd = from + WINDOW_S;
     const now = `${s.status}/${s.list.length}/${s.list.filter((x) => x.audio).length}`;
     if (now !== before) { // a poll that brings nothing new is not written down
       const at = s.list.find((x) => x.end > s.video.currentTime);
@@ -221,7 +225,7 @@ export class Poller {
   private offer(s: Run): void {
     const want = voicesOf(s, this.host.settings).voice;
     const now = s.videoVoice;
-    if (s.offered || !now || !want || now === want || s.refused || s.stopped) return;
+    if (s.offered || !now || !want || now === want || s.refused || s.keep || s.stopped) return;
     s.offered = true;
     void this.host.voiceName(now).then((name) => {
       if (s.stopped) return;
@@ -236,17 +240,21 @@ export class Poller {
     });
   }
 
-  /** The server asks for page data (page_needed) when it hasn't the video's subtitles yet: collect them from the
-   *  YouTube page once per session and post them; it waits ~20 s for them before fetching YouTube itself. */
+  /** The server asks for page data (page_needed) when it hasn't the video's subtitles yet: collected from the
+   *  YouTube page once a run and posted, with or without captions (then it is told why: it stops waiting and
+   *  fetches YouTube itself; it waits ~20 s for a page that does not come). */
   private async sendPage(s: Run): Promise<void> {
-    const site = this.host.site;
-    if (s.pageSent || s.stopped || !site.collectPage) return;
+    if (s.pageSent || s.stopped) return;
     s.pageSent = true;
+    const began = Date.now();
     try {
-      const page = await site.collectPage();
-      if (page && page.subs && !s.stopped) await this.host.api.video({ url: s.url, page_support: true, page });
+      const { page, via } = await this.host.site.collectPage();
+      const took = `${Date.now() - began} ms`;
+      this.host.note(page.subs ? `page: ${page.subs} captions (${page.subs_lang}) via ${via}, ${(page.tracks || []).length} more tracks, ${took}`
+        : `page: no captions (${page.subs_missing}), ${took}`);
+      if (!s.stopped) await this.host.api.video({ url: s.url, page_support: true, page });
     } catch (e) {
-      console.warn('VoxArbor UA: the page data was not sent', e); // the server falls back to fetching YouTube itself
+      this.host.note(`page: not sent (${(e as Error).message})`);
     }
   }
 }

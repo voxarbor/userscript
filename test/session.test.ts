@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 
-import { ApiError, type PageData, type Segment } from '../src/api/client';
+import type { Collected } from '../src/adapters/youtube/page';
+import { ApiError, type Segment } from '../src/api/client';
 import { type SessionHost, VoiceoverSession } from '../src/core/session';
 import { DEFAULTS, type Settings } from '../src/settings/store';
 import type { ToastAction } from '../src/ui/dom';
@@ -78,7 +79,8 @@ function page(over: Partial<Settings> = {}) {
     slowOpen: false,
   };
   /** reconnected: another tab has connected the script meanwhile (a refused token is no news for the person). */
-  const site = { url: VIDEO_A as string | null, video: video as FakeVideo | null, ad: false, page: null as PageData | null, reconnected: false };
+  const site = { url: VIDEO_A as string | null, video: video as FakeVideo | null, ad: false,
+    page: { page: { video_id: 'aaaaaaaaaaa', subs: null, subs_missing: 'no_tracks' } } as Collected, reconnected: false };
   /** The requests made, and what the session told the user, both in order. */
   const asked: string[] = [];
   const told: string[] = [];
@@ -673,11 +675,29 @@ test('a video the server gave up, or a request it refuses, switches the voice-ov
   await later.pass(3000);
   assert.deepEqual(later.told.slice(-3), ['idle', 'error: помилка обробки', 'toast: помилка обробки']);
 
-  const refused = page();
-  refused.server.down = new ApiError(404, 'HTTP 404');
+  const refused = page(); // a refusal: the server's words when it gives them (proposed `message`), else a few here
+  refused.server.down = new ApiError(404, 'HTTP 404', '{"detail":"no such video"}');
   refused.session.start();
   await refused.pass(0);
-  assert.deepEqual(refused.told.slice(1), ['idle', 'error: HTTP 404', 'toast: HTTP 404']);
+  assert.deepEqual(refused.told.slice(1), ['idle', 'error: Сервер відмовив (HTTP 404)', 'toast: Сервер відмовив (HTTP 404)']);
+  const told = page();
+  told.server.down = new ApiError(403, 'HTTP 403', JSON.stringify({ detail: 'x', message: '<b>Відео\u202eзакрите</b>\n' + 'я'.repeat(300) }));
+  told.session.start();
+  await told.pass(0);
+  const words = told.told.at(-1)!;
+  assert.equal(words.slice(0, 32), 'toast: <b>Відео закрите</b> яяяя'); // plain text: shown as it is, never as markup
+  assert.equal(words.length, 'toast: '.length + 200);
+});
+
+test('the server\'s words why the voices asked for were not taken are told once; a video kept is not offered to switch', async () => {
+  const p = page();
+  const opened = (p.session as unknown as { host: SessionHost }).host.api;
+  const plain = opened.video.bind(opened);
+  opened.video = async (body) => ({ ...(await plain(body)), voice: 'anna', voice_kept: 'Це відео вже озвучене', voice_refused: null });
+  p.session.start();
+  await p.pass(0);
+  await p.pass(3000);
+  assert.deepEqual([p.told.filter((t) => t.startsWith('toast:')), p.offers.length], [['toast: Це відео вже озвучене'], 0]);
 });
 
 test('a person who may not generate is told why: nothing to read switches the voice-over off, a part to read keeps it on', async () => {
@@ -744,32 +764,26 @@ test('a server that does not answer: said so, asked again every ten seconds, and
   assert.deepEqual([p.asked.slice(1), p.told.at(-1)], [[again, 'GET k1 from 3'], 'on: 100%']);
 });
 
-test('page data the server asks for is collected and posted once per switching on, if it has subtitles', async () => {
+test('page data the server asks for is collected and posted once per switching on, with captions or without', async () => {
   const p = page();
   p.server.pageNeeded = true;
-  p.site.page = { video_id: 'aaaaaaaaaaa', subs: 'manual', json3: { events: [] } };
+  p.site.page = { page: { video_id: 'aaaaaaaaaaa', subs: 'manual', subs_lang: 'en', json3: { events: [] } }, via: 'player' };
   p.session.start();
   await p.pass(0);
-  const data = `POST {"url":"${VIDEO_A}","page_support":true,"page":{"video_id":"aaaaaaaaaaa","subs":"manual","json3":{"events":[]}}}`;
+  const data = `POST {"url":"${VIDEO_A}","page_support":true,"page":{"video_id":"aaaaaaaaaaa","subs":"manual","subs_lang":"en","json3":{"events":[]}}}`;
   assert.deepEqual(p.asked, [OPEN_A, 'GET k1 from 0', data]);
   await p.pass(10_000);
   assert.equal(p.asked.filter((a) => a === data).length, 1);
+  assert.ok(p.notes.some((n) => /^page: manual captions \(en\) via player, 0 more tracks, \d+ ms$/.test(n)), p.notes.join('\n'));
 
+  // none: the page goes all the same, saying why (the server stops waiting for captions and fetches them itself)
   const bare = page();
   bare.server.pageNeeded = true;
-  bare.site.page = { video_id: 'aaaaaaaaaaa', subs: null };
   bare.session.start();
   await bare.pass(0);
-  assert.deepEqual(bare.asked, [OPEN_A, 'GET k1 from 0']);
-});
-
-test('the audio context is made once, at the first asking; without one a volume change has nothing to set', () => {
-  const p = page();
-  p.session.voiceVolumeChanged();
-  assert.equal(p.contexts.length, 0);
-  const made = p.session.audio();
-  p.session.start();
-  assert.deepEqual([p.session.audio() === made, p.contexts.length], [true, 1]);
+  assert.deepEqual(bare.asked, [OPEN_A, 'GET k1 from 0',
+    `POST {"url":"${VIDEO_A}","page_support":true,"page":{"video_id":"aaaaaaaaaaa","subs":null,"subs_missing":"no_tracks"}}`]);
+  assert.ok(bare.notes.some((n) => /^page: no captions \(no_tracks\), \d+ ms$/.test(n)));
 });
 
 test('a video voiced in another voice is heard as it is, and the person is offered to voice it in theirs', async () => {
@@ -956,60 +970,12 @@ test('switching off while the video waits for the voice-over lets it go on; one 
   assert.equal(gone.video.paused, true);
 });
 
-test('the video opened ahead of the switching on is not opened again; another voice or place asks anew', async () => {
-  const p = page();
-  Object.assign(p.server, { windows: true, slowOpen: true, phrases: [phrase(0, 5, 8)] });
-  p.session.prepare();
-  assert.deepEqual([p.asked, p.session.on, p.contexts.length], [[OPEN_A], false, 0]); // asked at once; nothing is on yet
-  p.session.start();
-  await p.pass(0);
-  assert.equal(p.asked.length, 1);
-  await p.deliverOpen();
-  assert.deepEqual([p.asked, p.session.key], [[OPEN_A, ...audioOf(0)], 'k1']);
-
-  const other = page();
-  other.server.windows = true;
-  other.session.prepare();
-  other.session.start('anna'); // the viewer took a ready voice in the question: that is another opening
-  await other.pass(0);
-  assert.deepEqual(other.asked.map((a) => a.slice(a.indexOf('"voice"'), a.indexOf(',"lead_male"')) + a.slice(a.indexOf('"switch"'), a.indexOf(',"from"'))),
-    ['"voice":"Speaker_53""switch":false', '"voice":"anna","mode":"one""switch":true']);
-
-  const moved = page();
-  moved.server.windows = true;
-  moved.session.prepare();
-  moved.video.currentTime = 300; // the viewer went elsewhere in the video meanwhile
-  moved.session.start();
-  await moved.pass(0);
-  assert.deepEqual(moved.asked, [OPEN_A, OPEN_A.replace('"from":0', '"from":300')]);
-
-  const late = page();
-  late.server.windows = true;
-  late.session.prepare();
-  await late.pass(5000); // a question answered long after
-  late.session.start();
-  await late.pass(0);
-  assert.equal(late.asked.length, 2);
-
-  const failed = page();
-  failed.server.down = new ApiError(0, 'network error');
-  failed.session.prepare();
-  await failed.pass(0);
-  failed.session.start();
-  await failed.pass(0);
-  assert.deepEqual([failed.asked.length, failed.told.at(-1)], [1, 'offline: Сервер озвучки недоступний, повторю за 10 с']);
-  failed.server.down = null;
-  await failed.pass(10_000);
-  assert.deepEqual(failed.asked.length, 3); // opened anew, by itself (a server from before: with a GET)
-});
-
 test('switched off while the video is being opened: nothing more is asked or collected for it', async () => {
   const p = page();
   Object.assign(p.server, { slowOpen: true, pageNeeded: true });
   let collected = 0;
-  p.site.page = null;
-  const host = p.session as unknown as { host: { site: { collectPage(): Promise<PageData | null> } } };
-  host.host.site.collectPage = async () => (collected++, null);
+  const host = p.session as unknown as { host: { site: { collectPage(): Promise<Collected> } } };
+  host.host.site.collectPage = async () => (collected++, p.site.page);
   p.session.start();
   await p.pass(0);
   p.session.stop();
