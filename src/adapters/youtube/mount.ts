@@ -4,6 +4,9 @@
 type Mode = 'bar' | 'top' | 'overlay' | 'float';
 
 const isShorts = (): boolean => location.pathname.startsWith('/shorts/');
+/** A short on m.youtube.com: its see-through top bar and its overlay of gestures and buttons lie over the whole
+ *  player, which is a stacking context of its own, so nothing in the player takes a touch (seen 2026-11-21). */
+const phoneShort = (): boolean => isShorts() && /^m\./.test(location.hostname || '');
 
 /** YouTube's own row of controls over the player's top right corner, when the page has one: m.youtube.com's on a
  *  video (it appears once the player has started), the right half of a short's on a computer. */
@@ -79,8 +82,10 @@ export class Controls {
     // own, so they never overlap them and show and hide with YouTube's controls (also in full screen).
     const top = topRow();
     if (top) return { mode: 'top', into: top };
-    // A short on a phone and other layouts without either: a capsule in the player's top right corner, shown on a
-    // tap like YouTube's own controls. No player: one floating capsule above YouTube's bottom bar.
+    // A short on a phone: a capsule over the page, at the top left under YouTube's top bar (its buttons are at the
+    // right and at the bottom). Other layouts without either: a capsule in the player's top right corner, shown on
+    // a tap like YouTube's own controls. No player: one floating capsule above YouTube's bottom bar.
+    if (phoneShort()) return { mode: 'float', into: document.body };
     const player = this.player();
     return player ? { mode: 'overlay', into: player } : { mode: 'float', into: document.body };
   }
@@ -106,6 +111,9 @@ export class Controls {
         transition: 'opacity .2s', position: mode === 'overlay' ? 'absolute' : 'fixed',
         top: mode === 'overlay' ? '8px' : '', right: mode === 'overlay' ? '8px' : '12px',
         bottom: mode === 'float' ? 'calc(64px + env(safe-area-inset-bottom, 0px))' : '' });
+      if (mode === 'float' && phoneShort()) {
+        Object.assign(g.style, { top: 'calc(56px + env(safe-area-inset-top, 0px))', left: '12px', right: '', bottom: '' });
+      }
     }
     return g;
   }

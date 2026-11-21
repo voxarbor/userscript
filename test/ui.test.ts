@@ -187,10 +187,19 @@ test('the switch shows the state, toggles on a click and opens the settings on a
   assert.deepEqual([main.style.color, main.title], ['#4e4', 'Українська озвучка (правий клік: налаштування)']);
 
   main.fire('pointerdown');
-  main.fire('pointerup');
+  main.fire('pointerup', { pointerType: 'mouse' });
   vi.advanceTimersByTime(1000);
   main.fire('click');
   assert.deepEqual([told, layers().length], [['toggle'], 0]); // a short press
+
+  // a touch presses at its pointerup: m.youtube.com on an iPhone cancels its click; one that still comes is no
+  // second press
+  main.fire('pointerdown');
+  main.fire('pointerup', { pointerType: 'touch' });
+  main.fire('click');
+  assert.deepEqual(told, ['toggle', 'toggle']);
+  vi.advanceTimersByTime(1500);
+  told.length = 1;
 
   main.fire('pointerdown');
   vi.advanceTimersByTime(600);

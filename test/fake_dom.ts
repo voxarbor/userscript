@@ -8,6 +8,7 @@ interface FakeEvent {
   type: string;
   target: FakeElement;
   key?: string;
+  pointerType?: string;
   stopped: boolean;
   stopPropagation(): void;
   preventDefault(): void;
@@ -143,7 +144,7 @@ export class FakeElement {
   }
 
   /** Sends an event of the type from this element, as the browser would after the user's action. */
-  fire(type: string, init: { key?: string } = {}): FakeEvent {
+  fire(type: string, init: { key?: string; pointerType?: string } = {}): FakeEvent {
     const event: FakeEvent = {
       type,
       target: this,

@@ -22,9 +22,7 @@ export function mainButton(onToggle: () => void, openSettings: () => void): HTML
     }, 600);
   });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => clearTimeout(timer));
-  b.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+  onPress(b, () => {
     if (!long) onToggle();
   });
   b.addEventListener('contextmenu', (e) => {
@@ -38,12 +36,25 @@ export function mainButton(onToggle: () => void, openSettings: () => void): HTML
 export function tuneButton(onClick: () => void): HTMLButtonElement {
   const b = el('button', { type: 'button', title: 'VoxArbor UA: гучність і голос' }, icon(ICON_TUNE));
   b.style.cssText = BTN_CSS;
+  onPress(b, onClick);
+  return b;
+}
+
+/** A press: a click, or a touch that ends on the button. m.youtube.com on an iPhone takes the touches over its
+ *  player and their click never comes (its touchstart is cancelled, seen 2026-11-21): the touch's own pointerup
+ *  presses then, and a click that still follows it is not a second press. */
+function onPress(b: HTMLElement, run: () => void): void {
+  let touched = -Infinity;
+  b.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'mouse') return;
+    touched = Date.now();
+    run();
+  });
   b.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    onClick();
+    if (Date.now() - touched > 1000) run();
   });
-  return b;
 }
 
 /** The switch tells the state by its colour; text is its tooltip (the usual hint without one). */

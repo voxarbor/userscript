@@ -63,7 +63,7 @@ export function inPage(gm: { promises: boolean }): void {
     marks.mounted = performance.now();
     obs.disconnect();
   }).observe(document, { childList: true, subtree: true });
-  document.addEventListener('click', (e) => {
+  document.addEventListener('pointerup', (e) => { // a press ends here, also a touch whose click never comes (an iPhone's m.)
     if ((e.target as Element).closest('[data-vot]')) marks.click ??= performance.now();
   }, true);
   const pauses: number[] = (w.__vxPauses = []) as number[];

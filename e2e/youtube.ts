@@ -42,8 +42,12 @@ function page(name: FixtureName, mobile: boolean, opts: PlayerOptions): string {
   let body: string;
   if (mobile) {
     const player = `<div id="player" class="player-api player-size"><div class="html5-video-player ytp-mweb-player playing-mode" id="movie_player">${video}</div></div>`;
-    body = `<ytm-app><div id="player-container-id" class="player-container">` +
-      (shorts ? `<shorts-video id="shorts-video"><player-component>${player}</player-component></shorts-video>` : player) +
+    // a short: YouTube's see-through top bar and its overlay of gestures and buttons lie over the whole player
+    body = `<ytm-app><ytm-mobile-topbar-renderer class="${shorts ? 'shorts' : ''}"><header class="mobile-topbar-header">` +
+      `<button class="icon-button topbar-button-search-button">⌕</button></header></ytm-mobile-topbar-renderer>` +
+      `<div id="player-container-id" class="player-container">` +
+      (shorts ? `<shorts-video id="shorts-video"><player-component>${player}</player-component>` +
+        `<yt-reel-player-overlay-view-model class="reel-overlay"></yt-reel-player-overlay-view-model></shorts-video>` : player) +
       `<div id="player-control-container"><ytm-custom-control><ytm-watch-player-controls>` +
       (shorts ? '' : '<div class="player-controls-top"><button class="yt-cc">CC</button></div>') +
       `</ytm-watch-player-controls></ytm-custom-control></div></div></ytm-app>`;
@@ -61,6 +65,10 @@ function page(name: FixtureName, mobile: boolean, opts: PlayerOptions): string {
   }
   const config = { ...opts, name, mobile, shorts, player: fx.player, previous: { videoDetails: { videoId: 'previous000' } } };
   const css = '#movie_player,#shorts-player{position:relative;width:640px;max-width:100vw;height:360px;background:#000}' +
+    'ytm-mobile-topbar-renderer{display:block;position:sticky;top:0;height:48px;z-index:4}' +
+    'ytm-mobile-topbar-renderer.shorts{position:fixed;left:0;right:0}.topbar-button-search-button{float:right;width:48px;height:48px}' +
+    'shorts-video{display:block;position:relative}.reel-overlay{position:absolute;inset:0;z-index:3}' +
+    '.ytp-mweb-player{z-index:0}' + // m.youtube.com's player is a stacking context of its own (z-index 0, seen 2026-11-21)
     '.player-controls-top,#right-controls{display:flex;min-height:48px}video{width:100%;height:100%}body{margin:0;background:#0f0f0f;color:#fff}';
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
     `<title>${name}</title><style>${css}</style></head><body>${body}` +
@@ -97,6 +105,12 @@ function fakePlayer(): void {
     if (track.languageCode) ask(track);
   };
   if (track.languageCode) ask(track);
+  // m.youtube.com on an iPhone takes the touches over its player: their click never comes (seen 2026-11-21)
+  if (/iPhone/.test(navigator.userAgent)) {
+    document.addEventListener('touchstart', (e) => {
+      if ((e.target as Element).closest('#player-container-id')) e.preventDefault();
+    }, { capture: true, passive: false });
+  }
   el.getPlayerResponse = () => fx.player;
   if (!fx.noApi) {
     Object.assign(el, {

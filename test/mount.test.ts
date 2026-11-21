@@ -109,6 +109,17 @@ test('a phone: the buttons wait in a capsule over the player and move into the t
   assert.equal(controls.wantsRemount(), false);
 });
 
+test('a short on a phone: a capsule over the page under YouTube\'s top bar, not in the player (its overlay lies over it)', () => {
+  const { doc, where, controls, mount, capsule } = youtube('/shorts/abc');
+  Object.assign(where, { hostname: 'm.youtube.com' });
+  doc.found[BAR] = null;
+  mount();
+  assert.deepEqual([capsule().parentElement, capsule().dataset.vot], [doc.body, 'float']);
+  assert.deepEqual([capsule().style.left, capsule().style.right, capsule().style.bottom], ['12px', '', '']);
+  assert.match(capsule().style.top!, /^calc\(56px/);
+  assert.equal(controls.wantsRemount(), false);
+});
+
 test('nothing mounted yet: nothing to move', () => {
   assert.equal(youtube('/watch').controls.wantsRemount(), false);
 });
