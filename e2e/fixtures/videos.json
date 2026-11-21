@@ -1,0 +1,385 @@
+{
+ "_": "Player responses of public YouTube videos as www.youtube.com gave them on 2026-11-21 (e2e/README: how they were recorded), trimmed to what the script reads; per-request values in the tracks' addresses replaced. The captions themselves are not recorded: the fake player answers with a few made-up lines (e2e/youtube.ts).",
+ "manual": {
+  "path": "/watch?v=wdpjv2enZLM",
+  "player": {
+   "videoDetails": {
+    "videoId": "wdpjv2enZLM",
+    "title": "I BUILT THE BIGGEST MINECRAFT ROUNDABOUT For AUTOMATED VEHICLES",
+    "lengthSeconds": "1080",
+    "author": "Kindle Bubble Dump",
+    "isLiveContent": false
+   },
+   "playabilityStatus": {
+    "status": "OK"
+   },
+   "captions": {
+    "playerCaptionsTracklistRenderer": {
+     "captionTracks": [
+      {
+       "languageCode": "en-US",
+       "name": {
+        "simpleText": "English (United States)"
+       },
+       "vssId": ".en-US",
+       "baseUrl": "/api/timedtext?v=wdpjv2enZLM&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=en-US"
+      }
+     ],
+     "audioTracks": [
+      {
+       "captionTrackIndices": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "streamingData": {
+    "adaptiveFormats": []
+   }
+  }
+ },
+ "auto": {
+  "path": "/watch?v=fUgn8iImHmk",
+  "player": {
+   "videoDetails": {
+    "videoId": "fUgn8iImHmk",
+    "title": "Ep. 1 | Starting From Scratch - Minecraft Let's Play",
+    "lengthSeconds": "514",
+    "author": "Auyuib",
+    "isLiveContent": false
+   },
+   "playabilityStatus": {
+    "status": "OK"
+   },
+   "captions": {
+    "playerCaptionsTracklistRenderer": {
+     "captionTracks": [
+      {
+       "languageCode": "en",
+       "name": {
+        "simpleText": "English (auto-generated)"
+       },
+       "vssId": "a.en",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=fUgn8iImHmk&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=en&kind=asr"
+      }
+     ],
+     "audioTracks": [
+      {
+       "captionTrackIndices": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "streamingData": {
+    "adaptiveFormats": []
+   }
+  }
+ },
+ "none": {
+  "path": "/watch?v=7Vc4-FDGBxo",
+  "player": {
+   "videoDetails": {
+    "videoId": "7Vc4-FDGBxo",
+    "title": "10 Minutes of Rain and Thunderstorm Sounds For Focus, Relaxing and Sleep ⛈️ Epidemic ASMR",
+    "lengthSeconds": "599",
+    "author": "Overtone Ambient",
+    "isLiveContent": false
+   },
+   "playabilityStatus": {
+    "status": "OK"
+   },
+   "streamingData": {
+    "adaptiveFormats": []
+   }
+  }
+ },
+ "short": {
+  "path": "/shorts/qmXFT0FjvCw",
+  "player": {
+   "videoDetails": {
+    "videoId": "qmXFT0FjvCw",
+    "title": "Ranking most relatable school moments #shorts",
+    "lengthSeconds": "25",
+    "author": "GABBYSHORTZ",
+    "isLiveContent": false
+   },
+   "playabilityStatus": {
+    "status": "OK"
+   },
+   "captions": {
+    "playerCaptionsTracklistRenderer": {
+     "captionTracks": [
+      {
+       "languageCode": "en",
+       "name": {
+        "simpleText": "English (auto-generated)"
+       },
+       "vssId": "a.en",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=qmXFT0FjvCw&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=en&kind=asr"
+      },
+      {
+       "languageCode": "fr",
+       "name": {
+        "simpleText": "French (auto-generated)"
+       },
+       "vssId": "a.fr",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=qmXFT0FjvCw&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=fr&kind=asr"
+      },
+      {
+       "languageCode": "de",
+       "name": {
+        "simpleText": "German (auto-generated)"
+       },
+       "vssId": "a.de",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=qmXFT0FjvCw&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=de&kind=asr"
+      },
+      {
+       "languageCode": "hi",
+       "name": {
+        "simpleText": "Hindi (auto-generated)"
+       },
+       "vssId": "a.hi",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=qmXFT0FjvCw&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=hi&kind=asr"
+      },
+      {
+       "languageCode": "id",
+       "name": {
+        "simpleText": "Indonesian (auto-generated)"
+       },
+       "vssId": "a.id",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=qmXFT0FjvCw&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=id&kind=asr"
+      },
+      {
+       "languageCode": "it",
+       "name": {
+        "simpleText": "Italian (auto-generated)"
+       },
+       "vssId": "a.it",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=qmXFT0FjvCw&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=it&kind=asr"
+      },
+      {
+       "languageCode": "pt",
+       "name": {
+        "simpleText": "Portuguese (auto-generated)"
+       },
+       "vssId": "a.pt",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=qmXFT0FjvCw&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=pt&kind=asr"
+      },
+      {
+       "languageCode": "es",
+       "name": {
+        "simpleText": "Spanish (auto-generated)"
+       },
+       "vssId": "a.es",
+       "kind": "asr",
+       "baseUrl": "/api/timedtext?v=qmXFT0FjvCw&ei=e2e&caps=asr&opi=0&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip,ipbits,expire,v,ei,caps,opi,xoaf&signature=e2e&key=yt8&lang=es&kind=asr"
+      }
+     ],
+     "audioTracks": [
+      {
+       "audioTrackId": "hi.10",
+       "captionTrackIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      },
+      {
+       "audioTrackId": "es-US.10",
+       "captionTrackIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      },
+      {
+       "audioTrackId": "de-DE.10",
+       "captionTrackIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      },
+      {
+       "audioTrackId": "fr-FR.10",
+       "captionTrackIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      },
+      {
+       "audioTrackId": "id.10",
+       "captionTrackIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      },
+      {
+       "audioTrackId": "it.10",
+       "captionTrackIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      },
+      {
+       "audioTrackId": "pt-BR.10",
+       "captionTrackIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      },
+      {
+       "audioTrackId": "en-US.4",
+       "captionTrackIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      }
+     ]
+    }
+   },
+   "streamingData": {
+    "adaptiveFormats": [
+     {
+      "itag": 140,
+      "audioTrack": {
+       "id": "de-DE.10",
+       "audioIsDefault": false,
+       "isAutoDubbed": true
+      }
+     },
+     {
+      "itag": 140,
+      "audioTrack": {
+       "id": "es-US.10",
+       "audioIsDefault": false,
+       "isAutoDubbed": true
+      }
+     },
+     {
+      "itag": 140,
+      "audioTrack": {
+       "id": "fr-FR.10",
+       "audioIsDefault": false,
+       "isAutoDubbed": true
+      }
+     },
+     {
+      "itag": 140,
+      "audioTrack": {
+       "id": "hi.10",
+       "audioIsDefault": false,
+       "isAutoDubbed": true
+      }
+     },
+     {
+      "itag": 140,
+      "audioTrack": {
+       "id": "id.10",
+       "audioIsDefault": false,
+       "isAutoDubbed": true
+      }
+     },
+     {
+      "itag": 140,
+      "audioTrack": {
+       "id": "it.10",
+       "audioIsDefault": false,
+       "isAutoDubbed": true
+      }
+     },
+     {
+      "itag": 140,
+      "audioTrack": {
+       "id": "pt-BR.10",
+       "audioIsDefault": false,
+       "isAutoDubbed": true
+      }
+     },
+     {
+      "itag": 140,
+      "audioTrack": {
+       "id": "en-US.4",
+       "audioIsDefault": true
+      }
+     }
+    ]
+   }
+  }
+ },
+ "live": {
+  "path": "/watch?v=jfKfPfyJRdk",
+  "player": {
+   "videoDetails": {
+    "videoId": "jfKfPfyJRdk",
+    "title": "lofi hip hop radio 📚 beats to relax/study to",
+    "lengthSeconds": "0",
+    "author": "Lofi Girl",
+    "isLive": true,
+    "isLiveContent": true
+   },
+   "playabilityStatus": {
+    "status": "OK"
+   },
+   "streamingData": {
+    "adaptiveFormats": []
+   }
+  }
+ }
+}

@@ -14,3 +14,12 @@ jobs:
           node-version: 18
           cache: npm
       - run: ./check.sh
+  # The browser tests (e2e/, about a minute): in Playwright's image, which has the browser.
+  e2e:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.49.1-noble
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci --no-audit --no-fund
+      - run: npm run e2e

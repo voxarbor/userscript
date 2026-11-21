@@ -1,0 +1,52 @@
+# Тести в браузері
+
+Зібраний скрипт (`dist/voxarbor.user.js`) на сторінках YouTube у Chromium (Playwright): як комп'ютер на
+www.youtube.com і як два телефони (Pixel 7, iPhone 14) на m.youtube.com, з дотиком. Мережі тести не потребують:
+YouTube і сервер VoxArbor підставні.
+
+```sh
+npm run e2e           # Chromium Playwright на хості (npx playwright install chromium)
+npm run e2e:docker    # в образі mcr.microsoft.com/playwright:v1.49.1-noble
+npm run smoke:live    # справжній YouTube, вручну
+```
+
+## З чого складається
+
+- `youtube.ts` — підставний YouTube. Сторінки мають розмітку плеєра, як на справжньому YouTube 2026-11-21
+  (`#movie_player` на www і m., `#shorts-player` Short на комп'ютері з прихованим `#movie_player` попереднього
+  відео, рядок керування `.player-controls-top` на телефоні) і вимагають Trusted Types, як YouTube. Об'єкт плеєра має
+  API, яке бачили на www і m.: `getPlayerResponse`, `isSubtitlesOn`, `getOption`/`setOption('captions', 'track')`,
+  `toggleSubtitles`, `toggleSubtitlesOn` (на m. він нічого не робить для автоматичної доріжки, як і справжній).
+  Увімкнені субтитри плеєр просить сам, із затримкою (`askDelay`) і токеном `pot`; `timedtext` відповідає лише на такий
+  запит, а на адресу доріжки без токена — порожньо, як YouTube. Відео — тихий WAV на 5 хвилин.
+- `fixtures/videos.json` — відповіді плеєра справжніх відео, урізані до того, що читає скрипт: ручні `en-US`
+  (`wdpjv2enZLM`), лише автоматичні (`fUgn8iImHmk`), без субтитрів (`7Vc4-FDGBxo`), трансляція (`jfKfPfyJRdk`),
+  Short з AI-дубляжами (`qmXFT0FjvCw`). Тексти субтитрів не записано: підставний YouTube віддає кілька вигаданих
+  рядків.
+- `server.ts` — підставний сервер VoxArbor. Кожен запит скрипта й кожну відповідь він звіряє з
+  `api/script-openapi.json` (копія серверного golden; `VOXARBOR_CONTRACT=шлях` — інший файл, наприклад
+  запропонований). Розбіжність — провал тесту.
+- `harness.ts` — функції менеджера скриптів у сторінці (`GM_*` як у Tampermonkey і Violentmonkey або лише
+  `GM.*`), запуск скрипта після завантаження сторінки (як `document-idle`), журнал того, що звучить
+  (`AudioBufferSourceNode.start`: місце відео і швидкість) і пауз відео.
+- `voiceover.e2e.ts` — сценарії: старт; субтитри без кнопки CC для кожної фікстури; субтитри глядача лишаються;
+  пізні субтитри; субтитри, яких немає (сторінка йде з причиною, пробується адреса доріжки); змінений переклад
+  (новий хеш аудіо, без паузи); немає аудіо (відео чекає); перезапуск сервера (503 і без відповіді, тихі повтори);
+  перемотка; швидкість 2×; дві вкладки; вхід і вихід; менеджер лише з `GM.*`.
+- `startup.e2e.ts` — скільки мс від запуску скрипта до кнопок і від натискання до `POST /v1/videos`.
+- `live.ts`, `live.config.ts` — ручна перевірка на справжньому YouTube. Потрібна мережа, якій YouTube дає грати
+  відео (з дата-центру він просить увійти).
+
+## Як записано фікстури
+
+2026-11-21, Playwright 1.49.1 (Chromium) з домашньої мережі, профілі Desktop Chrome, Pixel 7 і iPhone 14. Для кожного
+відео збережено `getPlayerResponse()` плеєра, розмітку навколо плеєра й те, що робить API плеєра. Що з'ясувалося:
+
+- `setOption('captions', 'track', {languageCode, kind})` вмикає доріжку й одразу дає запит плеєра з `pot` і на www,
+  і на m.; `setOption('captions', 'track', {})` вимикає. `toggleSubtitlesOn()` на m. (Pixel 7) для автоматичної
+  доріжки нічого не робить. `loadModule('captions')` сам запиту не дає.
+- На m. кнопки CC у плеєрі немає; SPA-перехід там шле `state-navigateend` на `window`, на www — `yt-navigate-finish`.
+- У браузері під керуванням Playwright `timedtext` відповідає порожньо навіть на власний запит плеєра з `pot`, і на
+  www, і на m., і з вікном (xvfb): YouTube не дає субтитрів автоматизованому браузеру. Тому в живій перевірці скрипт
+  отримує запит плеєра, але текст порожній (`subs_missing: fetch_failed`); справжній телефон треба перевірити руками.
+- `baseUrl` доріжки без `pot` дає порожню відповідь і на www, і на m.
