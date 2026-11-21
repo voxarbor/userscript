@@ -268,6 +268,29 @@ export interface components {
              * @enum {string}
              */
             error: "authorization_pending" | "slow_down" | "access_denied" | "expired_token";
+            /**
+             * Message
+             * @description What the person reads about the sign-in (Ukrainian, plain text, at most 200 characters).
+             */
+            message?: string | null;
+        };
+        /**
+         * ErrorOut
+         * @description A refusal (4xx) or failure (5xx) of /v1, as JSON: FastAPI's detail, and the words for the person with a machine reason.
+         */
+        ErrorOut: {
+            /** Detail */
+            detail: unknown;
+            /**
+             * Message
+             * @description What the person reads (Ukrainian, plain text, at most 200 characters); the script shows it as it is.
+             */
+            message?: string | null;
+            /**
+             * Reason
+             * @description A short machine code of why (snake_case), for the script's logic and the journal.
+             */
+            reason?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -328,6 +351,11 @@ export interface components {
             subs?: ("manual" | "auto" | "asr") | null;
             /** Subs Lang */
             subs_lang?: string | null;
+            /**
+             * Subs Missing
+             * @description Why the page has no captions (subs is null): no player of the video on the page, the video has no caption tracks, the player made no caption request (its token) and the track's own address gave nothing, or the tracks asked for came back empty. Logged; the run does not wait for captions any more.
+             */
+            subs_missing?: ("no_player" | "no_tracks" | "no_url" | "fetch_failed") | null;
             /** Title */
             title?: string | null;
             /** Tracks */
@@ -390,6 +418,11 @@ export interface components {
             speakers?: components["schemas"]["SpeakerOut"][] | null;
             /** Status */
             status: string | null;
+            /**
+             * Status Text
+             * @description The server's words for the state of the video, for the person (Ukrainian, plain text, at most 200 characters): the switch's tooltip in place of the percentage.
+             */
+            status_text?: string | null;
             /** Voice */
             voice?: string | null;
             /** Voiced Until */
@@ -497,6 +530,11 @@ export interface components {
             source_lang: string | null;
             /** Status */
             status: string | null;
+            /**
+             * Status Text
+             * @description The server's words for the state of the video, for the person (Ukrainian, plain text, at most 200 characters): the switch's tooltip in place of the percentage.
+             */
+            status_text?: string | null;
             /** Video Key */
             video_key: string;
             /** Voice */
@@ -717,6 +755,33 @@ export interface operations {
                     "application/json": components["schemas"]["VideoOut"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -724,6 +789,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -759,6 +833,33 @@ export interface operations {
                     "application/json": components["schemas"]["SegmentsOut"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -766,6 +867,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
