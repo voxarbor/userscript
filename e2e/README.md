@@ -6,7 +6,7 @@ YouTube і сервер VoxArbor підставні.
 
 ```sh
 npm run e2e           # Chromium Playwright на хості (npx playwright install chromium)
-npm run e2e:docker    # в образі mcr.microsoft.com/playwright:v1.49.1-noble
+npm run e2e:docker    # в образі mcr.microsoft.com/playwright:v1.65.1-noble
 npm run smoke:live    # справжній YouTube, вручну
 ```
 
