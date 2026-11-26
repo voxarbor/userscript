@@ -9,11 +9,11 @@
     "typecheck": "tsc --noEmit",
     "schema": "openapi-typescript api/script-openapi.json -o src/api/schema.d.ts",
     "e2e": "node build.mjs && playwright test",
-    "e2e:docker": "docker run --rm --ipc=host -v \"$PWD\":/w -w /w mcr.microsoft.com/playwright:v1.49.1-noble npm run -s e2e --",
+    "e2e:docker": "docker run --rm --ipc=host -v \"$PWD\":/w -w /w mcr.microsoft.com/playwright:v1.65.1-noble npm run -s e2e --",
     "smoke:live": "node build.mjs && playwright test --config e2e/live.config.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.1",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^18.19.130",
     "ajv": "^8.20.0",
     "esbuild": "^0.25.0",
