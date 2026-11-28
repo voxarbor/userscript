@@ -65,7 +65,7 @@ function host(over: Partial<UiHost> = {}) {
     copy: async () => {},
     ...over,
   };
-  const saved = (): Partial<Settings> => platform.getValue<Partial<Settings>>('settings', {});
+  const saved = (): Partial<Settings> => ({ ...platform.getValue('preferences', {}), ...platform.getValue('connection', {}) });
   return { h, told, speakers, settings: store.current, saved };
 }
 

@@ -133,7 +133,7 @@ export class SettingsWindow {
     button.onclick = settings.token
       ? () => {
         settings.token = settings.account = '';
-        this.host.store.save();
+        this.host.store.saveConnection();
         this.host.onConnectionChanged();
         this.showConnection(box);
       }
@@ -161,7 +161,7 @@ export class SettingsWindow {
       const got = await signIn(site, deviceName(navigator.userAgent), (code) =>
         show(`Код ${code}: перевірте, що на сайті той самий, і натисніть там «Підключити».`));
       Object.assign(this.host.store.current, { token: got.token, account: `${got.login} · ${got.name}` });
-      this.host.store.save();
+      this.host.store.saveConnection();
       this.signing = false;
       this.host.onConnectionChanged();
       show(null);

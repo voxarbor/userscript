@@ -25,17 +25,20 @@ export class Loader {
 
   private load(s: Run, seg: Segment & { audio: string }): void {
     const bufs = s.bufs; // replaced on a voice switch, so late loads of the old voice are dropped
-    bufs.set(seg.i, null); // loading
+    const entry: { buffer?: AudioBuffer } = {};
+    bufs.set(seg.i, entry);
     s.loading++;
     const began = Date.now();
     const name = `phrase ${seg.i} [${seg.start.toFixed(2)}–${seg.end.toFixed(2)}]`;
     this.api.bytes(seg.audio)
       .then((ab) => s.ctx.decodeAudioData(ab))
       .then((buf) => {
-        if (bufs.has(seg.i)) bufs.set(seg.i, buf);
+        if (s.bufs !== bufs || bufs.get(seg.i) !== entry) return;
+        entry.buffer = buf;
         this.note(`${name}: ${buf.duration.toFixed(2)} s of audio here ${Date.now() - began} ms after it was asked for`);
       })
       .catch((e: unknown) => {
+        if (s.bufs !== bufs || bufs.get(seg.i) !== entry) return;
         bufs.delete(seg.i);
         s.failed.set(seg.i, Date.now() + LOAD_RETRY_MS);
         this.note(`${name}: its audio failed (${(e as Error).message}), again in ${LOAD_RETRY_MS / 1000} s`);

@@ -31,7 +31,7 @@ export interface SessionHost {
   note(what: string): void;
   /** The server refused the script's token and the voice-over was switched off. -> another tab has connected
    *  the script since, and the voice-over was switched on again with that token: nothing to tell the person */
-  tokenRefused(): boolean;
+  tokenRefused(token: string): Promise<boolean>;
 }
 
 /** A phrase that sounds or is scheduled to: its source, its own gain and its place in the video (seconds). */
@@ -94,8 +94,8 @@ export class Run {
   busy = false;
   again = false;
 
-  /** Decoded audio by phrase; null: loading. */
-  bufs = new Map<number, AudioBuffer | null>();
+  /** Audio by phrase; each request owns its entry until it is replaced or removed. */
+  bufs = new Map<number, { buffer?: AudioBuffer }>();
   /** Phrases whose download failed, with the time (ms) it may be tried again. */
   failed = new Map<number, number>();
   loading = 0;
@@ -111,6 +111,8 @@ export class Run {
   held = false;
   startHold = false;
   heldAt = 0;
+  /** After a long hold, play through the gap and the voiced run that justified skipping it. */
+  skipUntil: number | null = null;
   /** The first phrases have come and the playback was asked whether to wait for their audio (once a run). */
   prepped = false;
   /** A ready video waits, a moment, for the audio of the phrase i; since: when the wait began (ms). */
@@ -131,6 +133,7 @@ export class Run {
     readonly ctx: AudioContext,
     readonly gain: GainNode,
     public only: string | null,
+    readonly token: string,
   ) {
     this.base = video.volume;
     this.setVol = video.volume;
@@ -140,12 +143,13 @@ export class Run {
 interface Parked {
   url: string;
   voice: string;
+  token: string;
   key: string;
   status: string | null;
   progress: number | null;
   segs: Map<number, Segment>;
   list: Segment[];
-  bufs: Map<number, AudioBuffer | null>;
+  bufs: Run['bufs'];
   until: number;
 }
 
@@ -163,7 +167,7 @@ export class VoiceoverSession {
     this.loader = new Loader(host.api, (s) => {
       if (s.prep) this.playback.tick(s);
     }, (what) => host.note(what));
-    this.poller = new Poller(host, this.loader, this.playback, () => this.stop());
+    this.poller = new Poller(host, this.loader, this.playback, (keep) => this.stop(keep));
   }
 
   /** The voice-over is on. */
@@ -183,8 +187,8 @@ export class VoiceoverSession {
     return !!s && (this.host.site.getVideoUrl() !== s.url || !s.video.isConnected);
   }
 
-  /** only: a voice for this video alone, in place of the voices of the settings. */
-  start(only: string | null = null): void {
+  /** only picks a voice for this video alone. switchVoice explicitly revoices in the settings' voices. */
+  start(only: string | null = null, switchVoice = false): void {
     this.stop(); // never two runs at once: the one before would go on sounding with nobody to stop it
     const { settings: S, site } = this.host;
     const video = site.getVideo();
@@ -194,9 +198,11 @@ export class VoiceoverSession {
     gain.gain.value = S.voiceVolume;
     if (video.paused) ctx.suspend();
     else ctx.resume();
-    const s = (this.run = new Run(video, url, ctx, gain, only));
+    const s = (this.run = new Run(video, url, ctx, gain, only, S.token));
+    s.wantSwitch = switchVoice;
     const mode = modeOf(voicesOf(s, S));
-    if (reusable(this.parked, url, mode, Date.now())) {
+    if (this.parked?.token !== s.token) this.parked?.bufs.clear();
+    if (!switchVoice && this.parked?.token === s.token && reusable(this.parked, url, mode, Date.now())) {
       // windowEnd stays null: one segments request refreshes the window, audio already decoded is not fetched again
       const { key, voice, status, progress, segs, list, bufs } = this.parked;
       Object.assign(s, { key, mode: voice, status, progress, segs, list, bufs });
@@ -223,6 +229,7 @@ export class VoiceoverSession {
       s.done.clear();
       s.windowEnd = null;
       s.voicedUntil = null; // belongs to the old position until the refetch
+      s.skipUntil = null;
       s.gen++;
       this.loader.pump(s); // a phrase already known at the new place: its audio is asked for without waiting for the window
       this.poller.kick(s, 0);
@@ -259,7 +266,11 @@ export class VoiceoverSession {
     }
   }
 
-  stop(): void {
+  stop(keep = true): void {
+    if (!keep) {
+      this.parked?.bufs.clear();
+      this.parked = null;
+    }
     const s = this.run;
     if (!s) return;
     const lost = this.lostVideo;
@@ -270,8 +281,10 @@ export class VoiceoverSession {
     s.ac.abort();
     this.playback.stopSources(s);
     s.ctx.suspend(); // no audio thread kept running while the voice-over is off
-    if (s.key && s.status !== 'error') {
-      const p = (this.parked = { url: s.url, voice: s.mode, key: s.key, status: s.status, progress: s.progress,
+    if (!keep || s.token !== this.host.settings.token) {
+      s.bufs.clear();
+    } else if (s.key && s.status !== 'error') {
+      const p = (this.parked = { url: s.url, voice: s.mode, token: s.token, key: s.key, status: s.status, progress: s.progress,
         segs: s.segs, list: s.list, bufs: s.bufs, until: Date.now() + PARK_MS });
       // then free the decoded audio
       setTimeout(() => {
@@ -309,6 +322,7 @@ export class VoiceoverSession {
     s.only = null;
     s.voices++;
     s.voicedUntil = null;
+    s.skipUntil = null;
     this.playback.stopSources(s); // the voice before is not heard a moment longer: what sounds or waits to, stops
     s.done.clear();
     s.failed.clear();

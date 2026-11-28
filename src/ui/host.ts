@@ -7,7 +7,7 @@ import type { SettingsStore } from '../settings/store';
 export interface UiHost {
   /** The user's settings. The controls change `current` in place (the session reads the same object every
    *  frame) and then save it. */
-  readonly store: Readonly<Pick<SettingsStore, 'current' | 'save' | 'saveSoon'>>;
+  readonly store: Readonly<Pick<SettingsStore, 'current' | 'save' | 'saveSoon' | 'saveConnection'>>;
   readonly api: Pick<ServerApi, 'voices' | 'videoVoices' | 'speakers' | 'speakerVoice' | 'bytes' | 'deviceCode' | 'deviceToken'>;
   readonly site: Pick<SiteAdapter, 'getVideo' | 'getPlayer' | 'panelAtTop'>;
   /** The server's key of the video being voiced; null while the voice-over is off or the server has not

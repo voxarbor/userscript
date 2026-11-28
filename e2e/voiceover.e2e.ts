@@ -179,7 +179,7 @@ test('sign-in and out: a refused script is asked to connect, connects through th
   await o.page.locator('[data-vot] button').first().click({ button: 'right' });
   await o.page.getByRole('button', { name: 'Відключити' }).click();
   await expect(o.page.getByRole('button', { name: 'Підключити', exact: true })).toBeVisible();
-  const stored = await o.page.evaluate(() => JSON.parse(localStorage.getItem('vx-gm:settings') || '{}').token);
+  const stored = await o.page.evaluate(() => JSON.parse(localStorage.getItem('vx-gm:connection') || '{}').token);
   expect(stored).toBe('');
 });
 

@@ -98,6 +98,7 @@ export type PageSent = PageData & { subs_missing?: SubsMissing };
 export interface Collected {
   page: PageSent;
   via?: 'player' | 'base_url' | 'button';
+  captionsTooLarge?: boolean;
 }
 
 /** The player of the page's video with what it tells, read through the page's own object (Firefox: behind the
@@ -187,13 +188,19 @@ async function pressCC(btn: HTMLElement): Promise<() => void> {
   };
 }
 
-const TRACKS_ROOM = 4_500_000; // the server takes 5 MB of caption files in one page, by its own count (weight)
+const CAPTIONS_MAX = 5 * 1024 * 1024;
+const EXTRA_TRACKS_MAX = 4;
 
 /** How much of the server's limit a caption file takes: its JSON as the server writes it, where a letter outside
  *  ASCII is six characters. */
 export function weight(json3: Json3): number {
-  const text = JSON.stringify(json3);
-  return text.length + 5 * text.replace(/[\x00-\x7f]+/g, '').length;
+  let exponentPadding = 0;
+  const text = JSON.stringify(json3, (_key, value: unknown) => {
+    // Python uses two digits in the exponent: 1e-07, 1e-08, 1e-09.
+    if (typeof value === 'number' && Math.abs(value) >= 1e-9 && Math.abs(value) < 1e-6) exponentPadding++;
+    return value;
+  });
+  return text.length + 5 * text.replace(/[\x00-\x7e]+/g, '').length + exponentPadding;
 }
 
 /** The address of a track's json3: a timedtext address (the player's own request, which carries its token, or a
@@ -220,11 +227,15 @@ export function playerTrack(own: string): WantedTrack {
 export async function moreTracks(own: string, wanted: WantedTrack[], get: (url: string) => Promise<Json3 | null>, room: number): Promise<PageTrack[]> {
   const files = await Promise.all(wanted.map((w) => get(trackUrl(own, w)).catch(() => null)));
   const tracks: PageTrack[] = [];
-  wanted.forEach((w, n) => {
+  for (const [n, w] of wanted.entries()) {
     const json3 = files[n];
-    if (!json3 || (room -= weight(json3)) < 0) return;
+    if (!json3) continue;
+    const size = weight(json3);
+    if (size > room) continue;
+    room -= size;
     tracks.push({ lang: w.lang, kind: w.kind, ...(w.translatedFrom ? { translated_from: w.translatedFrom } : {}), json3 });
-  });
+    if (tracks.length === EXTRA_TRACKS_MAX) break;
+  }
   return tracks;
 }
 
@@ -284,10 +295,11 @@ export async function collectPage(): Promise<Collected> {
     hadOwn ||= own;
     const main = await mainTrack(url, wanted, own);
     if (!main) continue;
+    const room = CAPTIONS_MAX - weight(main.json3);
+    if (room < 0) return { page: { ...page, subs_missing: 'fetch_failed' }, captionsTooLarge: true };
     // besides the main track: the speech's own tracks, English and Ukrainian (extraTracks), as far as the server's
     // limit goes
-    const tracks = await moreTracks(url, extraTracks(cr.captionTracks, { lang: main.lang, subs: main.subs }), json3At,
-      TRACKS_ROOM - weight(main.json3));
+    const tracks = room ? await moreTracks(url, extraTracks(cr.captionTracks, { lang: main.lang, subs: main.subs }), json3At, room) : [];
     return { page: { ...page, subs: main.subs, subs_lang: main.lang, json3: main.json3, ...(tracks.length ? { tracks } : {}) }, via };
   }
   return { page: { ...page, subs_missing: hadOwn ? 'fetch_failed' : 'no_url' } };

@@ -49,8 +49,8 @@ export class Playback {
     const ad = s.original || site.inAd(v);
     if (ad && s.sources.length) this.stopSources(s);
     if (!v.seeking && !ad) {
-      for (const seg of due(s.list, t, !v.paused, s.done, (x) => s.bufs.get(x.i)?.duration)) {
-        const buf = s.bufs.get(seg.i);
+      for (const seg of due(s.list, t, !v.paused, s.done, (x) => s.bufs.get(x.i)?.buffer?.duration)) {
+        const buf = s.bufs.get(seg.i)?.buffer;
         if (!buf) continue; // not here yet: joined in its middle if it comes while enough of it is left
         s.done.add(seg.i);
         this.play(s, seg, buf, t);
@@ -58,7 +58,7 @@ export class Playback {
     }
     const always = S.duckAlways && !s.offline; // then the per-frame phrase scan is not needed
     const speaking = s.ducked = !ad && isDucked({ always: S.duckAlways, offline: s.offline,
-      near: !always && shouldDuck(s.list.filter((x) => s.bufs.get(x.i)), s.sources, t) });
+      near: !always && shouldDuck(s.list.filter((x) => s.bufs.get(x.i)?.buffer), s.sources, t) });
     const target = speaking ? s.base * S.origVolume : s.base;
     if (Math.abs(v.volume - target) > 0.001) {
       const speed = Math.max(s.base * (1 - S.origVolume), 0.05) / DUCK_TIME;
@@ -106,7 +106,7 @@ export class Playback {
     const v = s.video;
     const t = v.currentTime;
     const first = firstToHear(s.list, t); // a phrase that is nearly over would not be joined: not waited for either
-    if (s.status !== 'ready' || !first || first.start - t > PREP_NEAR || s.bufs.get(first.i)) return;
+    if (s.status !== 'ready' || !first || first.start - t > PREP_NEAR || s.bufs.get(first.i)?.buffer) return;
     if (this.host.site.inAd(v)) return;
     s.prep = { i: first.i, since: Date.now() };
     if (!v.paused) {
@@ -124,7 +124,7 @@ export class Playback {
     const p = s.prep;
     if (!p) return;
     const waited = Date.now() - p.since;
-    const why = s.bufs.get(p.i) ? 'its audio is here'
+    const why = s.bufs.get(p.i)?.buffer ? 'its audio is here'
       : !s.bufs.has(p.i) ? 'its audio is not coming'
         : waited >= PREP_MS ? 'the time is up'
           : s.offline || s.status !== 'ready' ? 'the video is not ready any more' : null;
@@ -165,6 +165,8 @@ export class Playback {
     const waiting = mustWait({ status: s.status, offline: s.offline, startHold: s.startHold,
       waitForVoice: this.host.settings.waitForVoice, known: !!s.key && s.windowEnd != null });
     if (!waiting) return this.release(s);
+    if (s.skipUntil !== null && t < s.skipUntil) return;
+    s.skipUntil = null;
     const ahead = voiceAhead(s.voicedUntil, s.list, t, s.status === 'voicing' ? s.windowEnd : null);
     const step = holdStep({ held: s.held, paused: s.video.paused, ahead, heldMs: Date.now() - s.heldAt }, s.list, t);
     if (step === 'pause') {
@@ -173,7 +175,8 @@ export class Playback {
       s.video.pause();
       this.host.setState('busy', 'Чекаю озвучку…');
       this.host.note(`hold: the video waits for the voice-over at ${t.toFixed(2)}, ${ahead.toFixed(1)} s are voiced ahead`);
-    } else if (step === 'release') {
+    } else if (step) {
+      if (typeof step === 'object') s.skipUntil = step.skipUntil;
       this.host.note(`hold: the video goes on after ${Date.now() - s.heldAt} ms, ${ahead.toFixed(1)} s are voiced ahead`);
       this.release(s);
     }

@@ -137,7 +137,7 @@ function page(over: Partial<Settings> = {}) {
     voiceName: async (id) => 'name of ' + id,
     openSettings: () => told.push('settings'),
     note: (what) => notes.push(what),
-    tokenRefused: () => {
+    tokenRefused: async () => {
       told.push('token refused');
       return site.reconnected;
     },
@@ -152,9 +152,9 @@ function page(over: Partial<Settings> = {}) {
     for (const run of frames.splice(0)) run();
     await pass(0);
   };
-  /** A slow server answers its oldest audio request. */
-  const deliver = async (): Promise<void> => {
-    undelivered.shift()!();
+  /** A slow server answers an audio request (the oldest by default). */
+  const deliver = async (index = 0): Promise<void> => {
+    undelivered.splice(index, 1)[0]!();
     await pass(0);
   };
   /** A server that holds its answers gives the oldest window asked for. */
@@ -386,6 +386,46 @@ test('a held video goes on when waiting is switched off in the settings', async 
   assert.equal(p.video.paused, false);
 });
 
+test('№15 · після очікування відео проходить пропуск і знову чекає на наступній неозвученій фразі', async () => {
+  const p = page();
+  Object.assign(p.server, { status: 'voicing', voicedUntil: 0,
+    phrases: [phrase(0, 0, 3, false), phrase(1, 3, 13), phrase(2, 13, 20, false)] });
+  p.session.start();
+  await p.pass(0);
+  await p.frame(0);
+  assert.equal(p.video.paused, true);
+  await p.pass(9000);
+  assert.equal(p.video.paused, false);
+  for (const t of [0.1, 2, 3]) {
+    await p.frame(t);
+    assert.equal(p.video.paused, false);
+  }
+  assert.equal(p.sounds().length, 1);
+  await p.frame(13);
+  assert.equal(p.video.paused, true);
+});
+
+test.each(['перемотування', 'зміна голосу'])('№15 · %s скидає дозвіл пройти пропуск', async (change) => {
+  const p = page();
+  Object.assign(p.server, { status: 'voicing', voicedUntil: 0, phrases: [phrase(0, 0, 3, false), phrase(1, 3, 13)] });
+  p.session.start();
+  await p.pass(0);
+  await p.frame(0);
+  await p.pass(9000);
+  assert.equal(p.video.paused, false);
+  await p.frame(0.5);
+  assert.equal(p.video.paused, false);
+  if (change === 'перемотування') {
+    p.video.currentTime = 0;
+    p.video.fire('seeking');
+  } else {
+    p.settings.voice = 'anna';
+    p.session.voicesChanged();
+  }
+  await p.frame(p.video.currentTime);
+  assert.equal(p.video.paused, true);
+});
+
 test('switched on over a paused video, the voice-over starts the video once it is ready', async () => {
   const p = page({ waitForVoice: false });
   p.video.paused = true;
@@ -530,6 +570,33 @@ test('a phrase voiced anew gets its new audio: the one fetched before is dropped
   assert.deepEqual(p.sounds().map((s) => s.buffer!.duration), [4]);
 });
 
+test.each([false, true])('№23 · пізня відповідь старої доріжки не чіпає нову (помилка: %s)', async (failed) => {
+  const p = page({ waitForVoice: false });
+  const edited = '/v1/audio/0-edited.opus';
+  Object.assign(p.server, { status: 'voicing', slow: true, phrases: [phrase(0, 5, 7)], clips: { [edited]: 4 },
+    lost: failed ? ['/v1/audio/0.opus'] : [] });
+  p.session.start();
+  await p.pass(0);
+  p.server.phrases = [{ ...phrase(0, 5, 7), audio: edited }];
+  await p.pass(3000);
+  assert.deepEqual(p.asked.filter((a) => a.startsWith('audio')), [...audioOf(0), 'audio ' + edited]);
+  await p.deliver(1);
+  await p.deliver();
+  await p.frame(5);
+  assert.deepEqual(p.sounds().map((s) => s.buffer!.duration), [4]);
+});
+
+test('№23 · нова версія фрази не чекає на повтор невдалого запиту попередньої', async () => {
+  const p = page();
+  const edited = '/v1/audio/0-edited.opus';
+  Object.assign(p.server, { status: 'voicing', phrases: [phrase(0, 5, 7)], lost: ['/v1/audio/0.opus'] });
+  p.session.start();
+  await p.pass(0);
+  p.server.phrases = [{ ...phrase(0, 5, 7), audio: edited }];
+  await p.pass(3000);
+  assert.deepEqual(p.asked.filter((a) => a.startsWith('audio')), [...audioOf(0), 'audio ' + edited]);
+});
+
 test('switching off keeps what was prepared for a minute: on again for the same video and voice asks only for the window', async () => {
   const p = page();
   p.server.phrases = [phrase(0, 1, 3)];
@@ -560,6 +627,26 @@ test('switching off keeps what was prepared for a minute: on again for the same 
   p.session.start();
   await p.pass(0);
   assert.deepEqual(p.asked.map((a) => a.slice(0, 4)), ['POST', 'GET ', 'audi']);
+});
+
+test.each([false, true])('№13 · інший акаунт відкриває те саме відео без старого буфера (сеанс зупинено: %s)', async (stopped) => {
+  const p = page({ token: 'account-a' });
+  p.server.phrases = [phrase(0, 5, 7)];
+  p.session.start();
+  await p.pass(0);
+  if (stopped) p.session.stop();
+
+  p.settings.token = 'account-b';
+  p.asked.length = 0;
+  Object.assign(p.server, { slowOpen: true, phrases: [phrase(1, 5, 7)] });
+  p.session.start();
+  await p.frame(5);
+  assert.equal(p.sounds().length, 0);
+  assert.deepEqual(p.asked, [OPEN_A.replace('"from":0', '"from":5')]);
+  await p.deliverOpen();
+  await p.frame(5.1);
+  assert.deepEqual(p.asked.slice(1), ['GET k1 from 5', ...audioOf(1)]);
+  assert.equal(p.sounds().length, 1);
 });
 
 test('the page going to another video is noticed, and switching off stops everything', async () => {

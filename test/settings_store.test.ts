@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
-import { MemoryPlatform } from '../src/platform/gm';
+import { MemoryPlatform, scriptManager } from '../src/platform/gm';
 import { DEFAULTS, SettingsStore } from '../src/settings/store';
 
 beforeEach(() => {
@@ -22,7 +22,7 @@ test('save writes at once; saveSoon writes once when the changes settle', () => 
   const store = new SettingsStore(platform);
   store.current.voice = 'Speaker_1';
   store.save();
-  assert.equal((platform.values.settings as { voice: string }).voice, 'Speaker_1');
+  assert.equal(new SettingsStore(platform).current.voice, 'Speaker_1');
 
   const writes: number[] = [];
   const set = platform.setValue.bind(platform);
@@ -66,26 +66,27 @@ test('two tabs: a save writes only what this tab changed, over what another tab 
   const panel = new SettingsStore(platform);
   panel.current.token = 'vxa_new'; // the panel's page connects the script
   panel.current.account = 'ann';
-  panel.save();
+  panel.saveConnection();
 
   const same = youtube.current;
   youtube.current.voiceVolume = 0.5; // a slider in the older tab
   youtube.save();
-  assert.deepEqual(platform.values.settings, { ...DEFAULTS, voice: 'a', token: 'vxa_new', account: 'ann', voiceVolume: 0.5 });
+  assert.deepEqual(new SettingsStore(platform).current, { ...DEFAULTS, voice: 'a', token: 'vxa_new', account: 'ann', voiceVolume: 0.5 });
   assert.equal(youtube.current, same); // the one object the session and the UI hold
-  assert.equal(youtube.current.token, 'vxa_new'); // and this tab is connected now, too
+  assert.deepEqual(youtube.refresh(), ['token', 'account']);
+  assert.equal(youtube.current.token, 'vxa_new');
 
   panel.current.voice = 'b';
   panel.save();
   youtube.current.voice = 'c'; // both changed the same setting: the later save wins
   youtube.save();
-  assert.equal((platform.values.settings as { voice: string }).voice, 'c');
+  assert.equal(new SettingsStore(platform).current.voice, 'c');
 
   youtube.current.token = youtube.current.account = ''; // «Відключити» here
-  youtube.save();
+  youtube.saveConnection();
   panel.current.origVolume = 0.3;
   panel.save();
-  assert.equal((platform.values.settings as { token: string }).token, ''); // not written back by the other tab
+  assert.equal(new SettingsStore(platform).current.token, ''); // not written back by the other tab
 });
 
 test('refresh takes what other tabs wrote, keeps what this tab has changed and not saved yet, and tells what is new', () => {
@@ -95,6 +96,7 @@ test('refresh takes what other tabs wrote, keeps what this tab has changed and n
   assert.deepEqual(here.refresh(), []);
   there.current.token = 'vxa_new';
   there.current.voice = 'b';
+  there.saveConnection();
   there.save();
   here.current.voice = 'c'; // changed here, the write still waits
   here.saveSoon();
@@ -102,5 +104,37 @@ test('refresh takes what other tabs wrote, keeps what this tab has changed and n
   assert.deepEqual([here.current.token, here.current.voice], ['vxa_new', 'c']);
   assert.deepEqual(here.refresh(), []);
   vi.advanceTimersByTime(400);
-  assert.equal((platform.values.settings as { voice: string }).voice, 'c');
+  assert.equal(new SettingsStore(platform).current.voice, 'c');
+});
+
+test('№33 · збереження повзунка зі старої вкладки GM.* зберігає нове підключення', async () => {
+  const values = new Map([['settings', JSON.stringify({ token: 'old', account: 'А', voice: 'a' })]]);
+  vi.stubGlobal('GM', {
+    getValue: async (key: string) => values.get(key),
+    setValue: async (key: string, value: string) => { values.set(key, value); },
+    xmlHttpRequest: () => {},
+  });
+  try {
+    const old = new SettingsStore((await scriptManager())!);
+    const panel = new SettingsStore((await scriptManager())!);
+    Object.assign(panel.current, { token: 'new', account: 'Б' });
+    panel.saveConnection();
+    old.current.voiceVolume = 0.5;
+    old.saveSoon();
+    vi.advanceTimersByTime(400);
+
+    const current = new SettingsStore((await scriptManager())!).current;
+    assert.deepEqual([current.token, current.account, current.voiceVolume, current.voice], ['new', 'Б', 0.5, 'a']);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test('№33 · відхилене старе підключення після перезавантаження вкладки лишається відключеним', () => {
+  const platform = new MemoryPlatform({ settings: { token: 'old', account: 'А', voice: 'a' } });
+  const store = new SettingsStore(platform);
+  store.refuseConnection('old');
+  assert.deepEqual([store.current.token, store.current.account], ['', '']);
+  const fresh = new SettingsStore(platform).current;
+  assert.deepEqual([fresh.token, fresh.account, fresh.voice], ['', '', 'a']);
 });

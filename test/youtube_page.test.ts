@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 
 import { extraTracks, listed, originalCaptions, originalLang, pickCaption, ukrainianDub } from '../src/adapters/youtube/captions';
-import { moreTracks, pageVideoId, playerTrack, readPlayer, trackUrl, weight } from '../src/adapters/youtube/page';
+import { collectPage, moreTracks, pageVideoId, playerTrack, readPlayer, trackUrl, weight } from '../src/adapters/youtube/page';
 
 /** An array of the page's world as a script in its own world (Firefox) sees it: reading works, but the page
  *  cannot call a function of ours, so every method that takes a callback throws. */
@@ -137,6 +137,7 @@ test('the tracks are fetched together; one that cannot be had, or does not fit t
   assert.deepEqual(await moreTracks(own, wanted, get, one - 1), []);
   // the weight is the server's: its JSON writes a letter outside ASCII as six characters
   assert.equal(weight({ a: 'я' }), '{"a":"я"}'.length + 5);
+  assert.equal(weight({ a: '\x7f', b: 1e-8 }), '{"a":"\\u007f","b":1e-08}'.length);
 });
 
 test('the player\'s caption tracks are read with their names, for the list the server is sent', () => {
@@ -159,6 +160,55 @@ test('the player\'s caption tracks are read with their names, for the list the s
     { lang: 'en', kind: null, name: 'English' },
     { lang: 'de', kind: null, name: null },
   ]);
+});
+
+async function collectCaptions(main: string, extra = 'субтитри') {
+  const url = 'https://www.youtube.com/api/timedtext?v=abcdefghijk';
+  vi.stubGlobal('location', new URL('https://www.youtube.com/watch?v=abcdefghijk'));
+  vi.stubGlobal('document', {
+    getElementById: (id: string) => id === 'movie_player' ? {
+      getPlayerResponse: () => ({
+        videoDetails: { videoId: 'abcdefghijk', title: 'Відео', lengthSeconds: '90' },
+        captions: { playerCaptionsTracklistRenderer: {
+          audioTracks: [{ audioTrackId: 'de.4', captionTrackIndices: [0] }, { audioTrackId: 'es.10' }],
+          captionTracks: [{ ...t('de'), baseUrl: url }, t('es-419'), t('es', 'asr'), t('en'), t('uk')],
+        } },
+      }),
+    } : null,
+    querySelector: () => null,
+  });
+  vi.stubGlobal('fetch', async (track: string) => {
+    const params = new URL(track).searchParams;
+    const utf8 = params.get('lang') === 'de' ? main : params.get('lang') === 'es-419' ? extra : 'субтитри';
+    return new Response(JSON.stringify({ events: [{ tStartMs: 0, segs: [{ utf8 }] }] }));
+  });
+  try {
+    return await collectPage();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
+
+test('№49 · сторінка надсилає основну доріжку і щонайбільше чотири додаткові', async () => {
+  const { page } = await collectCaptions('Untertitel');
+  assert.equal(page.subs_lang, 'de');
+  assert.equal(page.tracks?.length, 4);
+});
+
+test('№49 · завелика основна доріжка пропускається, а метадані й причина зберігаються', async () => {
+  const { page, captionsTooLarge } = await collectCaptions('я'.repeat(900_000));
+  assert.deepEqual([page.title, page.subs, page.subs_missing], ['Відео', null, 'fetch_failed']);
+  assert.equal(page.json3, undefined);
+  assert.equal(page.caption_tracks?.length, 5);
+  assert.equal(captionsTooLarge, true);
+});
+
+test('№49 · за спільним лімітом після завеликої додаткової доріжки вміщуються менші', async () => {
+  const { page } = await collectCaptions('a'.repeat(4_200_000), 'b'.repeat(1_100_000));
+  assert.ok(page.json3);
+  assert.deepEqual(page.tracks?.map((x) => x.lang), ['es', 'en', 'en', 'uk']);
+  const total = weight(page.json3) + page.tracks!.reduce((sum, x) => sum + weight(x.json3), 0);
+  assert.ok(total <= 5 * 1024 * 1024);
 });
 
 test('the video of the address: a watch page, a short, a live page; another page is no video\'s', () => {

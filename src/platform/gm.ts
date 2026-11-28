@@ -55,7 +55,7 @@ declare const GM: {
 };
 
 /** The values the script keeps: read ahead where the manager only reads them in a promise. */
-export const KEPT = ['settings', 'ukDubOk', 'videoVoice'];
+export const KEPT = ['settings', 'preferences', 'connectionRefused', 'connection', 'ukDubOk', 'videoVoice'];
 
 /** The script manager the userscript runs in: its GM_* functions, else its promise-based GM.* ones. With those the
  *  kept values are read into memory ahead (and again by reload()) and written as JSON text (Greasemonkey keeps
@@ -73,10 +73,14 @@ export async function scriptManager(): Promise<(Platform & { reload(): Promise<v
   const sync = !!(get && set);
   if (!xhr || !(sync || (gm.getValue && gm.setValue))) return null;
   const kept = new Map<string, unknown>();
+  const writes = new Map<string, Promise<void>>();
   const reload = async (): Promise<void> => {
     if (sync) return;
     for (const key of KEPT) {
+      const write = writes.get(key);
+      if (write) await write;
       const text = await gm.getValue!(key);
+      if (writes.get(key) !== write) continue; // a newer local write already updated the cache
       try {
         kept.set(key, typeof text === 'string' ? JSON.parse(text) : undefined);
       } catch {
@@ -92,7 +96,10 @@ export async function scriptManager(): Promise<(Platform & { reload(): Promise<v
     setValue: (key, value) => {
       if (sync) return set!(key, value);
       kept.set(key, value);
-      void gm.setValue!(key, JSON.stringify(value));
+      const text = JSON.stringify(value);
+      const previous = writes.get(key);
+      const write = previous ? previous.then(() => gm.setValue!(key, text)) : gm.setValue!(key, text);
+      writes.set(key, write.catch(() => {})); // a failed write leaves reload() able to read the stored value
     },
     request: (request) => xhr(request),
     menu: (title, run) => menu && menu(title, run),

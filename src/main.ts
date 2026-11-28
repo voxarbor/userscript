@@ -25,9 +25,15 @@ function wire(adapter: SiteAdapter, platform: Platform & { reload(): Promise<voi
 
   // The voice-over on again with the connection as it is now (another token, or none).
   const reconnect = (): void => {
-    if (!session.on) return;
-    session.stop();
-    session.start(kept(adapter.getVideoUrl()) || null);
+    const wasOn = session.on;
+    session.stop(false);
+    if (looking !== null) {
+      asking++;
+      looking = null;
+      ui.setState('idle');
+    }
+    readyQuestion.drop();
+    if (wasOn) session.start(kept(adapter.getVideoUrl()) || null);
   };
   // Samples (the settings, the question about ready voices) sound through a context of their own, made at the
   // first one: through the voice-over's, a sample let a phrase frozen by a pause sound on.
@@ -43,18 +49,22 @@ function wire(adapter: SiteAdapter, platform: Platform & { reload(): Promise<voi
     voiceName: async (id: string): Promise<string> => (await ui.voices().catch((): Voice[] => [])).find((v) => v.id === id)?.label || id,
     openSettings: () => ui.openSettings(),
     note: (what) => journal.mark(what),
-    tokenRefused() {
+    async tokenRefused(token): Promise<boolean> {
+      const url = adapter.getVideoUrl();
+      try {
+        await platform.reload();
+      } catch {
+        return session.on;
+      }
+      if (session.on) return true;
+      store.refresh();
       // another tab may have connected the script since this one read its settings: then on again with that token
-      if (store.refresh().includes('token') && S.token) {
+      if (S.token && S.token !== token) {
         journal.mark('the token was refused; another tab has connected the script since: on again with its token');
-        session.start(kept(adapter.getVideoUrl()) || null);
+        if (adapter.getVideoUrl() === url) session.start(kept(url) || null);
         return true;
       }
-      // the token is good no more: forgotten, so that the settings offer «Підключити» (they said «Підключено»)
-      if (S.token) {
-        S.token = S.account = '';
-        store.save();
-      }
+      store.refuseConnection(token);
       return false;
     },
   });
@@ -145,7 +155,7 @@ function wire(adapter: SiteAdapter, platform: Platform & { reload(): Promise<voi
     readyQuestion.ask(offer, (voice) => {
       if (adapter.getVideoUrl() !== url) return;
       take(url, voice);
-      session.start(voice || null);
+      session.start(voice || null, voice === '');
     });
   }
 
@@ -200,7 +210,7 @@ async function main(): Promise<void> {
     const box = document.getElementById('script-link');
     const S = store.current;
     const api = new ServerApi((request) => platform.request(request), () => ({ server: SERVER, token: S.token }));
-    if (box) void autoLink(box as unknown as LinkBox, { api, settings: S, saved: () => store.save() });
+    if (box) void autoLink(box as unknown as LinkBox, { api, settings: S, saved: () => store.saveConnection() });
     return;
   }
   if (!youtubeAdapter.match(location)) return;

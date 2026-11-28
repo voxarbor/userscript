@@ -37,7 +37,7 @@ export class Poller {
     private readonly host: SessionHost,
     private readonly loader: Loader,
     private readonly playback: Playback,
-    private readonly stop: () => void,
+    private readonly stop: (keep?: boolean) => void,
   ) {}
 
   /** The next poll in delay ms, in place of the one that waits; during a poll: right after it. */
@@ -74,6 +74,7 @@ export class Poller {
       let got = false; // the phrases came with the opening
       if (!s.key || s.mode !== mode || s.wantSwitch) {
         const change = !!s.key || !!s.only || s.wantSwitch;
+        if (change) s.skipUntil = null;
         const gen = s.gen;
         const round = s.voices;
         s.toldPaused = s.video.paused && !s.held;
@@ -124,8 +125,8 @@ export class Poller {
       s.busy = false;
       if (s.stopped) return;
       if (e.status === 401) {
-        this.stop();
-        if (this.host.tokenRefused()) return;
+        this.stop(false);
+        if (await this.host.tokenRefused(s.token)) return;
         this.host.toast(e.said || 'Скрипт не підключено: натисніть «Підключити»');
         return this.host.openSettings();
       }
@@ -156,7 +157,7 @@ export class Poller {
 
   /** Seconds of audio here (downloaded) ahead of the playback, without a gap. */
   private ahead(s: Run): number {
-    const here = s.list.map((x) => (s.bufs.get(x.i) ? x : { ...x, audio: null }));
+    const here = s.list.map((x) => (s.bufs.get(x.i)?.buffer ? x : { ...x, audio: null }));
     return bufferedAhead(here, s.video.currentTime, null);
   }
 
@@ -191,6 +192,7 @@ export class Poller {
     s.error = said(r.error); // with a non-error status: a transient local-ai problem, shown but not fatal
     s.refused = said(r.refused);
     s.statusText = said((r as Proposed).status_text);
+    if (r.voice && r.voice !== s.videoVoice) s.skipUntil = null;
     s.videoVoice = r.voice ?? s.videoVoice;
     this.offer(s);
     s.voicedUntil = r.voiced_until;
@@ -198,7 +200,10 @@ export class Poller {
     for (const seg of r.segments || []) {
       const had = s.segs.get(seg.i);
       // voiced anew (an edited text, another voice): the audio fetched before is not this phrase's any more
-      if (had && had.audio && seg.audio && had.audio !== seg.audio) s.bufs.delete(seg.i);
+      if (had && seg.audio && had.audio !== seg.audio) {
+        s.bufs.delete(seg.i);
+        s.failed.delete(seg.i);
+      }
       // while the new audio is being made the phrase keeps the one it had: better than silence
       s.segs.set(seg.i, seg.audio || !had ? seg : { ...seg, audio: had.audio });
     }
@@ -206,6 +211,7 @@ export class Poller {
       if (outOfReach(seg, from)) {
         s.segs.delete(i);
         s.bufs.delete(i);
+        s.failed.delete(i);
       }
     }
     s.list = [...s.segs.values()].sort((a, b) => a.start - b.start);
@@ -248,10 +254,10 @@ export class Poller {
     s.pageSent = true;
     const began = Date.now();
     try {
-      const { page, via } = await this.host.site.collectPage();
+      const { page, via, captionsTooLarge } = await this.host.site.collectPage();
       const took = `${Date.now() - began} ms`;
       this.host.note(page.subs ? `page: ${page.subs} captions (${page.subs_lang}) via ${via}, ${(page.tracks || []).length} more tracks, ${took}`
-        : `page: no captions (${page.subs_missing}), ${took}`);
+        : `page: no captions (${captionsTooLarge ? 'основна доріжка перевищує 5 МіБ' : page.subs_missing}), ${took}`);
       if (!s.stopped) await this.host.api.video({ url: s.url, page_support: true, page });
     } catch (e) {
       this.host.note(`page: not sent (${(e as Error).message})`);

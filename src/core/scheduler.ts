@@ -229,10 +229,12 @@ export function holdStep(
   now: { held: boolean; paused: boolean; ahead: number; heldMs: number },
   segments: Phrase[],
   t: number,
-): 'pause' | 'release' | null {
+): 'pause' | 'release' | { skipUntil: number } | null {
   if (!now.held) return !now.paused && now.ahead < HOLD_LOW ? 'pause' : null;
-  const enough = now.ahead >= HOLD_HIGH || (now.heldMs > STUCK_MS && voicedAfterGap(segments, t) >= HOLD_HIGH);
-  return enough ? 'release' : null;
+  if (now.ahead >= HOLD_HIGH) return 'release';
+  if (now.heldMs <= STUCK_MS) return null;
+  const afterGap = voicedAfterGap(segments, t);
+  return afterGap >= HOLD_HIGH ? { skipUntil: t + afterGap } : null;
 }
 
 /** A phrase too far from the position `from` to keep: it ended over KEEP_BEHIND s before it or starts over KEEP_AHEAD s after. */

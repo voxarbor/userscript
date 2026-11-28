@@ -327,7 +327,7 @@ test('holdStep: held over 8 s, a video goes on when ten seconds are voiced past 
   const stuck = [seg(0, 0, 4, null), seg(1, 4, 9), seg(2, 9, 15)];
   const held = { held: true, paused: true, ahead: 0 };
   assert.equal(holdStep({ ...held, heldMs: 8000 }, stuck, 0), null);
-  assert.equal(holdStep({ ...held, heldMs: 8001 }, stuck, 0), 'release');
+  assert.deepEqual(holdStep({ ...held, heldMs: 8001 }, stuck, 0), { skipUntil: 15 });
   assert.equal(holdStep({ ...held, heldMs: 8001 }, stuck.slice(0, 2), 0), null); // only 9 s from here
 });
 
